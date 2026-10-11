@@ -1,0 +1,28 @@
+{
+  "id": 1,
+  "jsonrpc": "2.0",
+  "result": {
+    "content": [
+      {
+        "text": "{\"name\":\"projects/3565986411852132714/screens/57822742ecef4db2b56de58dc8b397ce\",\"title\":\"Bibliothèque des Agents\",\"screenshot\":{\"name\":\"projects/3565986411852132714/screens/57822742ecef4db2b56de58dc8b397ce/fileEntries/screenshot\",\"downloadUrl\":\"https://lh3.googleusercontent.com/aida/AEtjO1V3WisipZ1MnOpYmprOt3gKKDIZR02jz5zIGF_gP24zhVh87HM2m6wP1ES3gtNdS1Ic1lBWNP3jZSkBrfIF7SqU--NSElRtY2l3R3Ub_so7qkqR22PgxTMrsyl8Y2Ku6pWp-8rhQ7thklBrMsvckIgo9HQGTF_YPvGO-UghGeJCoFhDxxoZZM3rN8GYz0Aq2Z-mUzybNkLknrQJ71xOiDxJmFbv6QcrGa0O3Kt9ETZyFXeNsAUwKFcuLu8\"},\"htmlCode\":{\"name\":\"projects/3565986411852132714/screens/57822742ecef4db2b56de58dc8b397ce/fileEntries/html\",\"downloadUrl\":\"https://contribution.usercontent.google.com/download?c=CgthaWRhX2NvZGVmeBJ7Eh1hcHBfY29tcGFuaW9uX2dlbmVyYXRlZF9maWxlcxpaCiVodG1sXzAwMDY1ZDkwOGVmYzFlZjAwMjNiYzE3ZDI1MDZlMjQ3EgsSBxDa3pO5jA0YAZIBIwoKcHJvamVjdF9pZBIVQhMzNTY1OTg2NDExODUyMTMyNzE0&filename=&opi=89354086\",\"mimeType\":\"text/html\"},\"width\":\"2560\",\"height\":\"3044\",\"deviceType\":\"DESKTOP\"}",
+        "type": "text"
+      }
+    ],
+    "structuredContent": {
+      "deviceType": "DESKTOP",
+      "height": "3044",
+      "htmlCode": {
+        "downloadUrl": "https://contribution.usercontent.google.com/download?c=CgthaWRhX2NvZGVmeBJ7Eh1hcHBfY29tcGFuaW9uX2dlbmVyYXRlZF9maWxlcxpaCiVodG1sXzAwMDY1ZDkwOGVmYzFlZjAwMjNiYzE3ZDI1MDZlMjQ3EgsSBxDa3pO5jA0YAZIBIwoKcHJvamVjdF9pZBIVQhMzNTY1OTg2NDExODUyMTMyNzE0&filename=&opi=89354086",
+        "mimeType": "text/html",
+        "name": "projects/3565986411852132714/screens/57822742ecef4db2b56de58dc8b397ce/fileEntries/html"
+      },
+      "name": "projects/3565986411852132714/screens/57822742ecef4db2b56de58dc8b397ce",
+      "screenshot": {
+        "downloadUrl": "https://lh3.googleusercontent.com/aida/AEtjO1V3WisipZ1MnOpYmprOt3gKKDIZR02jz5zIGF_gP24zhVh87HM2m6wP1ES3gtNdS1Ic1lBWNP3jZSkBrfIF7SqU--NSElRtY2l3R3Ub_so7qkqR22PgxTMrsyl8Y2Ku6pWp-8rhQ7thklBrMsvckIgo9HQGTF_YPvGO-UghGeJCoFhDxxoZZM3rN8GYz0Aq2Z-mUzybNkLknrQJ71xOiDxJmFbv6QcrGa0O3Kt9ETZyFXeNsAUwKFcuLu8",
+        "name": "projects/3565986411852132714/screens/57822742ecef4db2b56de58dc8b397ce/fileEntries/screenshot"
+      },
+      "title": "Bibliothèque des Agents",
+      "width": "2560"
+    }
+  }
+}

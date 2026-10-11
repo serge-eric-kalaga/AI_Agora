@@ -1,0 +1,28 @@
+{
+  "id": 1,
+  "jsonrpc": "2.0",
+  "result": {
+    "content": [
+      {
+        "text": "{\"name\":\"projects/3565986411852132714/screens/a414af5799044785bf6a5befe8d0d191\",\"title\":\"Fournisseurs IA & Infrastructure\",\"screenshot\":{\"name\":\"projects/3565986411852132714/screens/a414af5799044785bf6a5befe8d0d191/fileEntries/screenshot\",\"downloadUrl\":\"https://lh3.googleusercontent.com/aida/AEtjO1UxXg-Hv5drUWIGECNNfjJr05PVBRANuqFl0GTDrngAMQNDDIptBPvQNbX1SVLAhWtDuHe63rN5C3l1sfkZoTjGDt5h50jAAbwq8MpfngnOzJ5SAas3n9teQevbSZ23C0fY4xA0gL-qr4woBqNALiP6pFiO2NMIdbnyPdthF0R2cZEgtGekbJfyMVxbrTmp2PJFHR7QFyktb5j-0CgSzj0g5g1i6hKrLkfGJwBlYpKrHKwPcUkqa2-YFA\"},\"htmlCode\":{\"name\":\"projects/3565986411852132714/screens/a414af5799044785bf6a5befe8d0d191/fileEntries/html\",\"downloadUrl\":\"https://contribution.usercontent.google.com/download?c=CgthaWRhX2NvZGVmeBJ7Eh1hcHBfY29tcGFuaW9uX2dlbmVyYXRlZF9maWxlcxpaCiVodG1sXzAwMDY1ZDkwOGQ2MjcwYmEwMjNiZGFkNjRhMDRiNjkxEgsSBxDa3pO5jA0YAZIBIwoKcHJvamVjdF9pZBIVQhMzNTY1OTg2NDExODUyMTMyNzE0&filename=&opi=89354086\",\"mimeType\":\"text/html\"},\"width\":\"2560\",\"height\":\"4204\",\"deviceType\":\"DESKTOP\"}",
+        "type": "text"
+      }
+    ],
+    "structuredContent": {
+      "deviceType": "DESKTOP",
+      "height": "4204",
+      "htmlCode": {
+        "downloadUrl": "https://contribution.usercontent.google.com/download?c=CgthaWRhX2NvZGVmeBJ7Eh1hcHBfY29tcGFuaW9uX2dlbmVyYXRlZF9maWxlcxpaCiVodG1sXzAwMDY1ZDkwOGQ2MjcwYmEwMjNiZGFkNjRhMDRiNjkxEgsSBxDa3pO5jA0YAZIBIwoKcHJvamVjdF9pZBIVQhMzNTY1OTg2NDExODUyMTMyNzE0&filename=&opi=89354086",
+        "mimeType": "text/html",
+        "name": "projects/3565986411852132714/screens/a414af5799044785bf6a5befe8d0d191/fileEntries/html"
+      },
+      "name": "projects/3565986411852132714/screens/a414af5799044785bf6a5befe8d0d191",
+      "screenshot": {
+        "downloadUrl": "https://lh3.googleusercontent.com/aida/AEtjO1UxXg-Hv5drUWIGECNNfjJr05PVBRANuqFl0GTDrngAMQNDDIptBPvQNbX1SVLAhWtDuHe63rN5C3l1sfkZoTjGDt5h50jAAbwq8MpfngnOzJ5SAas3n9teQevbSZ23C0fY4xA0gL-qr4woBqNALiP6pFiO2NMIdbnyPdthF0R2cZEgtGekbJfyMVxbrTmp2PJFHR7QFyktb5j-0CgSzj0g5g1i6hKrLkfGJwBlYpKrHKwPcUkqa2-YFA",
+        "name": "projects/3565986411852132714/screens/a414af5799044785bf6a5befe8d0d191/fileEntries/screenshot"
+      },
+      "title": "Fournisseurs IA & Infrastructure",
+      "width": "2560"
+    }
+  }
+}

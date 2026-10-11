@@ -1,0 +1,28 @@
+{
+  "id": 1,
+  "jsonrpc": "2.0",
+  "result": {
+    "content": [
+      {
+        "text": "{\"name\":\"projects/3565986411852132714/screens/956fbe3e287741e1b5d88afa183163ee\",\"title\":\"Salle de conversation en direct\",\"screenshot\":{\"name\":\"projects/3565986411852132714/screens/956fbe3e287741e1b5d88afa183163ee/fileEntries/screenshot\",\"downloadUrl\":\"https://lh3.googleusercontent.com/aida/AEtjO1Wy1CGjiwkDm3dCxpLkVbgMUkMqJVEe_wt7hPEDvgVlRrWKIuZWSCkLlguZLu2fWtDt-JOZO0XHX2ZSiZ08LXzbZVyCqqLAHIfduRJcfkb3gOE0jaCpSmlrjp4sbzypy80mbiKLVGP4K84L5TM5YrdMTyhHR2C1M-lqUgT2pbw-T6vtQ2GIg609R8HwRjxSyWq505CHTjIHCqe63jAsTdZFH2UoS1wCsRm4pXxNK1Fp3K0qwMOJOVwZmao\"},\"htmlCode\":{\"name\":\"projects/3565986411852132714/screens/956fbe3e287741e1b5d88afa183163ee/fileEntries/html\",\"downloadUrl\":\"https://contribution.usercontent.google.com/download?c=CgthaWRhX2NvZGVmeBJ7Eh1hcHBfY29tcGFuaW9uX2dlbmVyYXRlZF9maWxlcxpaCiVodG1sXzAwMDY1ZDkwN2I2NDY2NDEwMjNiZjg1MTI4MWNkNDUwEgsSBxDa3pO5jA0YAZIBIwoKcHJvamVjdF9pZBIVQhMzNTY1OTg2NDExODUyMTMyNzE0&filename=&opi=89354086\",\"mimeType\":\"text/html\"},\"width\":\"2560\",\"height\":\"2048\",\"deviceType\":\"DESKTOP\"}",
+        "type": "text"
+      }
+    ],
+    "structuredContent": {
+      "deviceType": "DESKTOP",
+      "height": "2048",
+      "htmlCode": {
+        "downloadUrl": "https://contribution.usercontent.google.com/download?c=CgthaWRhX2NvZGVmeBJ7Eh1hcHBfY29tcGFuaW9uX2dlbmVyYXRlZF9maWxlcxpaCiVodG1sXzAwMDY1ZDkwN2I2NDY2NDEwMjNiZjg1MTI4MWNkNDUwEgsSBxDa3pO5jA0YAZIBIwoKcHJvamVjdF9pZBIVQhMzNTY1OTg2NDExODUyMTMyNzE0&filename=&opi=89354086",
+        "mimeType": "text/html",
+        "name": "projects/3565986411852132714/screens/956fbe3e287741e1b5d88afa183163ee/fileEntries/html"
+      },
+      "name": "projects/3565986411852132714/screens/956fbe3e287741e1b5d88afa183163ee",
+      "screenshot": {
+        "downloadUrl": "https://lh3.googleusercontent.com/aida/AEtjO1Wy1CGjiwkDm3dCxpLkVbgMUkMqJVEe_wt7hPEDvgVlRrWKIuZWSCkLlguZLu2fWtDt-JOZO0XHX2ZSiZ08LXzbZVyCqqLAHIfduRJcfkb3gOE0jaCpSmlrjp4sbzypy80mbiKLVGP4K84L5TM5YrdMTyhHR2C1M-lqUgT2pbw-T6vtQ2GIg609R8HwRjxSyWq505CHTjIHCqe63jAsTdZFH2UoS1wCsRm4pXxNK1Fp3K0qwMOJOVwZmao",
+        "name": "projects/3565986411852132714/screens/956fbe3e287741e1b5d88afa183163ee/fileEntries/screenshot"
+      },
+      "title": "Salle de conversation en direct",
+      "width": "2560"
+    }
+  }
+}

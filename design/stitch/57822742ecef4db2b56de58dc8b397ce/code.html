@@ -1,0 +1,955 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="fr"><head><meta charset="utf-8"/><meta content="width=device-width, initial-scale=1.0" name="viewport"/><meta content="web_dashboard" name="shell-type"/><link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@100..900&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/><style>@layer base{html,body{margin:0;padding:0;}body{overscroll-behavior:none;}main>:first-child{margin-top:0!important;}main>:last-child{margin-bottom:0!important;}}::-webkit-scrollbar{display:none;}</style><script src="https://cdn.tailwindcss.com"></script><script id="tailwind-config">tailwind.config={"darkMode":"class","theme":{"extend":{"colors":{"on-tertiary-fixed-variant":"#3d475c","surface":"#0e1323","outline-variant":"#484555","border-interactive":"rgba(124, 92, 255, 0.35)","on-primary":"#31009a","secondary":"#5de6ff","tertiary-fixed":"#d8e2fd","tertiary":"#bcc6e1","on-tertiary-fixed":"#111b2f","on-secondary-container":"#00515d","surface-tint":"#cabeff","on-primary-fixed-variant":"#4816cb","primary-fixed-dim":"#cabeff","status-warning":"#F59E0B","on-tertiary-container":"#202a3e","inverse-primary":"#603ce2","status-danger":"#EF4444","on-surface":"#dee1f9","inverse-surface":"#dee1f9","status-success":"#22C55E","border-subtle":"rgba(255, 255, 255, 0.08)","on-secondary-fixed":"#001f25","surface-container-lowest":"#080d1d","on-background":"#dee1f9","on-secondary-fixed-variant":"#004e5a","secondary-fixed-dim":"#2fd9f4","surface-variant":"#2f3446","inverse-on-surface":"#2b3041","tertiary-container":"#8791a9","primary-fixed":"#e6deff","tertiary-fixed-dim":"#bcc6e1","on-primary-fixed":"#1c0062","surface-bright":"#34394a","on-error":"#690005","surface-container-highest":"#2f3446","surface-dim":"#0e1323","primary":"#cabeff","glow-cyan":"rgba(34, 211, 238, 0.12)","glow-accent":"rgba(124, 92, 255, 0.15)","on-secondary":"#00363e","on-tertiary":"#263045","on-primary-container":"#2a0088","on-error-container":"#ffdad6","text-secondary":"#94A3B8","outline":"#938ea1","surface-container":"#1a1f30","secondary-container":"#00cbe6","surface-container-low":"#161b2b","surface-secondary":"#1B2539","primary-container":"#947dff","secondary-fixed":"#a2eeff","error":"#ffb4ab","text-primary":"#F8FAFC","on-surface-variant":"#c9c4d8","surface-container-high":"#25293a","error-container":"#93000a","surface-primary":"#131A2B","background":"#0e1323"},"borderRadius":{"DEFAULT":"0.25rem","lg":"0.5rem","xl":"0.75rem","full":"9999px"},"spacing":{"margin":"1rem","space-xl":"2rem","gutter":"1rem","gutter-desktop":"1.5rem","space-md":"0.75rem","space-lg":"1.25rem","margin-desktop":"2rem","space-sm":"0.5rem","space-xs":"0.25rem"},"fontFamily":{"headline-lg-mobile":["Geist"],"mono-metric":["Geist"],"body-sm":["Geist"],"display-hero":["Geist"],"headline-sm":["Geist"],"body-md":["Geist"],"headline-lg":["Geist"],"headline-md":["Geist"],"body-lg":["Geist"],"label-md":["Geist"],"label-sm":["Geist"],"display-hero-mobile":["Geist"]},"fontSize":{"headline-lg-mobile":["1.5rem",{"lineHeight":"1.25","letterSpacing":"-0.02em","fontWeight":"600"}],"mono-metric":["0.75rem",{"lineHeight":"1.2","letterSpacing":"0.02em","fontWeight":"500"}],"body-sm":["0.8125rem",{"lineHeight":"1.5","letterSpacing":"0","fontWeight":"400"}],"display-hero":["3.5rem",{"lineHeight":"1.1","letterSpacing":"-0.04em","fontWeight":"700"}],"headline-sm":["1rem",{"lineHeight":"1.4","letterSpacing":"-0.01em","fontWeight":"600"}],"body-md":["0.9375rem",{"lineHeight":"1.55","letterSpacing":"-0.005em","fontWeight":"400"}],"headline-lg":["2rem",{"lineHeight":"1.2","letterSpacing":"-0.03em","fontWeight":"600"}],"headline-md":["1.25rem",{"lineHeight":"1.35","letterSpacing":"-0.02em","fontWeight":"600"}],"body-lg":["1.0625rem",{"lineHeight":"1.6","letterSpacing":"-0.01em","fontWeight":"400"}],"label-md":["0.875rem",{"lineHeight":"1.3","letterSpacing":"-0.01em","fontWeight":"500"}],"label-sm":["0.75rem",{"lineHeight":"1.25","letterSpacing":"0.01em","fontWeight":"500"}],"display-hero-mobile":["2.25rem",{"lineHeight":"1.15","letterSpacing":"-0.03em","fontWeight":"700"}]}}}};</script></head><body class="bg-surface font-body-md text-on-surface min-h-screen selection:bg-primary selection:text-on-primary"><aside class="fixed left-0 top-0 h-screen w-72 bg-surface-container-lowest z-50 flex flex-col justify-between shadow-[0_1px_8px_rgba(0,0,0,0.4)]"><div class="flex flex-col flex-1 min-h-0"><div class="px-space-md py-space-md flex items-center justify-between gap-space-sm"><div class="flex items-center gap-space-sm min-w-0"><img alt="AI Agora Logo" class="h-8 w-auto object-contain flex-shrink-0" src="https://lh3.googleusercontent.com/aida/AEtjO1WCfOWjnEkedXfzQ6tEwfLPDx7byVacFJgWeE5bbNwrAuHc6arCOMIv6d-5CdGhlKmMf9tkPbDSZ_lH60N9M_5k20mQmdKERghHVVMGHk8sdqyGEoFUiHQd7nE6debH2eNovIwmfXRrV4EpZ_GvoYI3Zy4qFa4nz_d3wYSKvEKkg_958aTKO9_hzn3VXUDcKZ96nOBo5ADEWyIyQWhIP8zrlmHhMpc5RdmScPtXsE8TT2MXU3fuhw6tRkw"/><div class="flex flex-col min-w-0"><div class="flex items-center gap-space-xs"><span class="font-headline-sm text-headline-sm font-semibold text-text-primary tracking-tight truncate">AI Agora</span><span class="px-1.5 py-0.5 rounded text-[10px] uppercase font-mono-metric bg-surface-container text-secondary tracking-wider flex-shrink-0">v1.4</span></div><span class="font-label-sm text-label-sm text-text-secondary truncate">Enterprise Cluster</span></div></div><button class="p-1 text-text-secondary hover:text-on-surface hover:bg-surface-container rounded transition-colors" title="Réduire le menu" type="button"><span class="material-symbols-outlined text-[18px]">left_panel_close</span></button></div><div class="px-space-md pb-space-sm"><button class="w-full flex items-center justify-between px-space-sm py-space-xs rounded-lg bg-surface-primary hover:bg-surface-secondary text-left transition-colors" type="button"><div class="flex items-center gap-space-sm min-w-0"><span class="material-symbols-outlined text-[18px] text-primary flex-shrink-0">domain</span><div class="truncate"><p class="font-label-md text-label-md text-text-primary truncate">Acme Labs</p><p class="font-label-sm text-label-sm text-text-secondary truncate">Production</p></div></div><span class="material-symbols-outlined text-[18px] text-text-secondary flex-shrink-0">unfold_more</span></button></div><nav class="flex-1 px-space-sm py-space-xs space-y-0.5 overflow-y-auto" data-active-classes="bg-surface-secondary text-text-primary font-semibold"><a class="flex items-center gap-space-sm px-space-sm py-space-xs rounded-lg text-text-secondary hover:bg-surface-secondary hover:text-text-primary transition-colors font-body-md text-body-md" data-path="vue-densemble" href="#"><span class="material-symbols-outlined text-[20px]">space_dashboard</span><span class="truncate">Vue d'ensemble</span></a><a class="flex items-center gap-space-sm px-space-sm py-space-xs rounded-lg text-text-secondary hover:bg-surface-secondary hover:text-text-primary transition-colors font-body-md text-body-md" data-path="salle-en-direct" href="#"><div class="flex items-center gap-space-sm min-w-0"><span class="material-symbols-outlined text-[20px] text-status-success">forum</span><span class="truncate">Salle en direct</span></div><span class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full font-mono-metric text-mono-metric bg-surface-container text-status-success font-medium"><span class="w-1.5 h-1.5 rounded-full bg-status-success animate-pulse"></span>Actif 5</span></a><a class="flex items-center gap-space-sm px-space-sm py-space-xs rounded-lg text-text-secondary hover:bg-surface-secondary hover:text-text-primary transition-colors font-body-md text-body-md" data-path="mes-agents" href="#"><span class="material-symbols-outlined text-[20px]">smart_toy</span><span class="truncate">Mes agents</span></a><a class="flex items-center gap-space-sm px-space-sm py-space-xs rounded-lg text-text-secondary hover:bg-surface-secondary hover:text-text-primary transition-colors font-body-md text-body-md" data-path="creer-un-agent" href="#"><span class="material-symbols-outlined text-[20px]">auto_awesome</span><span class="truncate">Créer un agent</span></a><a class="flex items-center gap-space-sm px-space-sm py-space-xs rounded-lg text-text-secondary hover:bg-surface-secondary hover:text-text-primary transition-colors font-body-md text-body-md" data-path="creer-une-salle" href="#"><span class="material-symbols-outlined text-[20px]">add_comment</span><span class="truncate">Créer une salle</span></a><a class="flex items-center gap-space-sm px-space-sm py-space-xs rounded-lg text-text-secondary hover:bg-surface-secondary hover:text-text-primary transition-colors font-body-md text-body-md" data-path="explorer-les-salles" href="#"><span class="material-symbols-outlined text-[20px]">explore</span><span class="truncate">Explorer les salles</span></a><a class="flex items-center gap-space-sm px-space-sm py-space-xs rounded-lg text-text-secondary hover:bg-surface-secondary hover:text-text-primary transition-colors font-body-md text-body-md" data-path="fournisseurs-ia" href="#"><span class="material-symbols-outlined text-[20px]">hub</span><span class="truncate">Fournisseurs IA</span></a><a class="flex items-center gap-space-sm px-space-sm py-space-xs rounded-lg text-text-secondary hover:bg-surface-secondary hover:text-text-primary transition-colors font-body-md text-body-md" data-path="statistiques-et-debats" href="#"><span class="material-symbols-outlined text-[20px]">query_stats</span><span class="truncate">Statistiques &amp; Débats</span></a></nav></div><div class="p-space-md space-y-space-md bg-surface-container-lowest"><div class="p-space-sm rounded-lg bg-surface-primary space-y-space-xs"><div class="flex items-center justify-between font-label-sm text-label-sm"><span class="text-text-secondary flex items-center gap-1"><span class="material-symbols-outlined text-[14px]">data_usage</span>Tokens &amp; Budget</span><span class="font-mono-metric text-mono-metric text-secondary font-medium">64%</span></div><div class="h-1.5 w-full bg-surface-container rounded-full overflow-hidden"><div class="h-full bg-gradient-to-r from-primary to-secondary rounded-full w-[64%]"></div></div><div class="flex items-center justify-between font-mono-metric text-mono-metric text-text-secondary"><span>1.28M / 2.0M tok</span><span>420€ / 650€</span></div></div><div class="flex items-center justify-between pt-space-xs"><div class="flex items-center gap-space-sm min-w-0"><div class="relative flex-shrink-0"><img alt="Profile" class="w-8 h-8 rounded-full object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuA_tJ-M2MLir5ndZXmYWi3kcYQzv1jJ-TUL0PfsGL11Aic7D5lISqeixG9yrB3HRmUH8gTOD9oUs5inIqkng0wVRi19rKTsM2WVamKW3mNKGBzVtiIX4Uh-70IyC9LbADA0w3KA3WAlaAS9w_P_Bt-SbcdwdeqDUAb0MnaXSXk_4W0rFu9SoAJB9q9i_pRmgYCHrPGj5oABVzInMhrjekil-mMhlm7F4MnP8O98wAN0JWiH_9uUULyQ"/><span class="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full bg-status-success"></span></div><div class="min-w-0 truncate"><div class="flex items-center gap-1.5"><p class="font-label-md text-label-md text-text-primary truncate font-medium">Alexandre D.</p><span class="px-1 py-0.2 rounded text-[9px] uppercase font-mono-metric bg-primary-container text-on-primary-container font-semibold">Pro</span></div><p class="font-label-sm text-label-sm text-text-secondary truncate">alex@agora.ai</p></div></div><div class="flex items-center"><a class="p-1.5 rounded-md text-text-secondary hover:text-on-surface hover:bg-surface-secondary transition-colors" data-path="reglages" href="#" title="Paramètres du compte"><span class="material-symbols-outlined text-[18px]">settings</span></a></div></div></div></aside><div class="pl-72"><header class="fixed top-0 left-72 right-0 h-16 bg-surface/80 backdrop-blur-xl shadow-[0_1px_8px_rgba(0,0,0,0.04)] z-40"><div class="h-16 w-full px-gutter-desktop flex items-center justify-between gap-space-md"><div class="flex items-center gap-space-sm text-text-secondary min-w-0"><span class="material-symbols-outlined text-[18px]">home</span><span class="text-[14px]">/</span><span class="font-label-md text-label-md text-text-primary truncate">Agora</span><span class="text-[14px]">/</span><span class="font-label-md text-label-md text-primary truncate">Workspace</span></div><div class="flex-1 max-w-md hidden md:flex items-center"><div class="relative w-full"><span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-[18px] text-text-secondary">search</span><input class="w-full pl-9 pr-16 py-1.5 rounded-lg bg-surface-primary text-text-primary placeholder:text-text-secondary font-body-sm text-body-sm cursor-pointer hover:bg-surface-secondary transition-colors focus:outline-none" placeholder="Recherche rapide universelle, agents, logs..." readonly="" type="text"/><div class="absolute right-2.5 top-1/2 -translate-y-1/2 flex items-center gap-0.5 px-1.5 py-0.5 rounded bg-surface-container font-mono-metric text-[11px] text-text-secondary"><span>⌘</span><span>K</span></div></div></div><div class="flex items-center gap-space-md"><div class="hidden xl:flex items-center gap-space-md px-space-sm py-1 rounded-lg bg-surface-primary font-mono-metric text-mono-metric"><div class="flex items-center gap-1.5"><span class="w-2 h-2 rounded-full bg-status-success"></span><span class="text-text-secondary">Ollama Local:</span><span class="text-text-primary font-medium">Connecté</span></div><div class="h-3 w-px bg-surface-container-high"></div><div class="flex items-center gap-1.5"><span class="w-2 h-2 rounded-full bg-status-success"></span><span class="text-text-secondary">Cloud APIs:</span><span class="text-text-primary font-medium">99.9%</span></div></div><div class="flex items-center gap-space-sm"><button class="relative p-2 rounded-lg text-text-secondary hover:text-on-surface hover:bg-surface-secondary transition-colors" type="button"><span class="material-symbols-outlined text-[20px]">notifications</span><span class="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-status-warning"></span></button><a class="inline-flex items-center gap-1.5 px-space-md py-1.5 rounded-lg bg-primary-container text-on-primary-container hover:bg-primary transition-colors font-label-md text-label-md font-semibold shadow-[0_0_16px_rgba(124,92,255,0.25)]" data-path="creer-une-salle" href="#"><span class="material-symbols-outlined text-[18px]">add</span><span>Nouvelle conversation</span></a><div class="md:hidden flex items-center pl-space-xs"><img alt="Profile" class="w-8 h-8 rounded-full object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuA_tJ-M2MLir5ndZXmYWi3kcYQzv1jJ-TUL0PfsGL11Aic7D5lISqeixG9yrB3HRmUH8gTOD9oUs5inIqkng0wVRi19rKTsM2WVamKW3mNKGBzVtiIX4Uh-70IyC9LbADA0w3KA3WAlaAS9w_P_Bt-SbcdwdeqDUAb0MnaXSXk_4W0rFu9SoAJB9q9i_pRmgYCHrPGj5oABVzInMhrjekil-mMhlm7F4MnP8O98wAN0JWiH_9uUULyQ"/></div></div></div></div></header><main class="relative pt-16 bg-surface min-h-screen"><div class="flex flex-col w-full">
+<!-- Top Ambient Glow Field -->
+<div class="relative w-full overflow-hidden px-gutter-desktop py-space-xl">
+<div class="absolute -top-24 right-1/4 w-96 h-96 bg-primary/10 rounded-full blur-3xl pointer-events-none"></div>
+<div class="absolute -top-12 left-1/3 w-80 h-80 bg-secondary/5 rounded-full blur-3xl pointer-events-none"></div>
+<!-- Section Header & Operational Command Bar -->
+<div class="relative flex flex-col gap-space-lg max-w-7xl mx-auto">
+<div class="flex flex-col lg:flex-row lg:items-end justify-between gap-space-md">
+<div class="space-y-space-xs max-w-2xl">
+<div class="flex items-center gap-space-sm">
+<span class="px-2 py-0.5 rounded-full bg-surface-container font-mono-metric text-mono-metric text-secondary font-medium tracking-wide">
+              REGISTRY CLUSTER
+            </span>
+<span class="w-1 h-1 rounded-full bg-outline"></span>
+<span class="font-mono-metric text-mono-metric text-text-secondary">v2.4.9 ACTIVE NODE</span>
+</div>
+<div class="flex items-center gap-space-md">
+<h1 class="font-headline-lg text-headline-lg text-text-primary tracking-tight">Bibliothèque des Agents</h1>
+<span class="px-space-sm py-0.5 rounded-full bg-surface-container-high font-mono-metric text-mono-metric text-primary font-semibold shadow-sm">
+              16 agents enregistrés
+            </span>
+</div>
+<p class="font-body-md text-body-md text-text-secondary leading-relaxed">
+            Configurez, testez et orchestrez vos intelligences artificielles personnalisées. Modèles hébergés dans le Cloud ou exécutés localement via Ollama / LM Studio.
+          </p>
+</div>
+<!-- Primary CTA with split dropdown -->
+<div class="flex items-center gap-space-sm self-start lg:self-auto">
+<div class="relative inline-flex rounded-xl shadow-lg">
+<a class="inline-flex items-center gap-space-xs px-space-lg py-2.5 rounded-l-xl bg-primary-container text-on-primary-container hover:bg-primary hover:text-on-primary transition-all font-label-md text-label-md font-semibold" data-path="creer-un-agent" href="#">
+<span class="material-symbols-outlined text-[18px]">add</span>
+<span>Créer un agent</span>
+</a>
+<button class="px-2 py-2.5 rounded-r-xl bg-primary-container/80 text-on-primary-container hover:bg-primary hover:text-on-primary transition-all flex items-center justify-center" id="create-agent-menu-trigger" type="button">
+<span class="material-symbols-outlined text-[18px]">expand_more</span>
+</button>
+<!-- Dropdown Flyout -->
+<div class="hidden absolute right-0 top-full mt-2 w-64 rounded-xl bg-surface-secondary shadow-2xl p-1.5 z-30" id="create-agent-menu">
+<a class="flex items-start gap-space-sm p-space-sm rounded-lg hover:bg-surface-container transition-colors" href="#">
+<span class="material-symbols-outlined text-primary text-[20px] mt-0.5">tune</span>
+<div>
+<p class="font-label-md text-label-md text-text-primary font-medium">Formulaire avancé</p>
+<p class="font-label-sm text-label-sm text-text-secondary">Contrôle fin des prompts, hyperparamètres et RAG</p>
+</div>
+</a>
+<a class="flex items-start gap-space-sm p-space-sm rounded-lg hover:bg-surface-container transition-colors" href="#">
+<span class="material-symbols-outlined text-secondary text-[20px] mt-0.5">smart_toy</span>
+<div>
+<p class="font-label-md text-label-md text-text-primary font-medium">Assistant IA express</p>
+<p class="font-label-sm text-label-sm text-text-secondary">Générez une personnalité en langage naturel</p>
+</div>
+</a>
+</div>
+</div>
+</div>
+</div>
+<!-- Control Toolbar: Search + Multiselects + View Switcher -->
+<div class="p-space-sm rounded-2xl bg-surface-primary shadow-md flex flex-col xl:flex-row items-stretch xl:items-center justify-between gap-space-sm">
+<!-- Search bar -->
+<div class="relative flex-1 min-w-[280px]">
+<span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-[18px] text-text-secondary">search</span>
+<input class="w-full pl-9 pr-14 py-2 rounded-xl bg-surface-container-low text-text-primary placeholder:text-text-secondary font-body-sm text-body-sm focus:outline-none focus:ring-1 focus:ring-primary transition-all" id="agent-search" placeholder="Rechercher par nom, rôle, capacité ou mot-clé..." type="text"/>
+<div class="absolute right-3 top-1/2 -translate-y-1/2 px-1.5 py-0.5 rounded bg-surface-container font-mono-metric text-[10px] text-text-secondary">
+            ⌘F
+          </div>
+</div>
+<!-- Filter Selects -->
+<div class="flex flex-wrap items-center gap-space-xs">
+<!-- Fournisseur -->
+<div class="relative">
+<select class="appearance-none pl-3 pr-8 py-2 rounded-xl bg-surface-container-low font-label-sm text-label-sm text-text-primary hover:bg-surface-container focus:outline-none cursor-pointer">
+<option value="all">Fournisseur: Tous</option>
+<option value="openai">OpenAI Cloud</option>
+<option value="anthropic">Anthropic</option>
+<option value="deepseek">DeepSeek API</option>
+<option value="ollama">Ollama Local</option>
+<option value="alibaba">Alibaba Cloud</option>
+</select>
+<span class="material-symbols-outlined absolute right-2.5 top-1/2 -translate-y-1/2 text-[16px] text-text-secondary pointer-events-none">unfold_more</span>
+</div>
+<!-- Modèle -->
+<div class="relative">
+<select class="appearance-none pl-3 pr-8 py-2 rounded-xl bg-surface-container-low font-label-sm text-label-sm text-text-primary hover:bg-surface-container focus:outline-none cursor-pointer">
+<option value="all">Modèle: Tous</option>
+<option value="gpt4o">GPT-4o</option>
+<option value="claude35">Claude 3.5 Sonnet</option>
+<option value="llama33">Llama 3.3 70B</option>
+<option value="deepseekv3">DeepSeek-V3</option>
+<option value="qwen25">Qwen 2.5 72B</option>
+<option value="mistral">Mistral Large 2</option>
+</select>
+<span class="material-symbols-outlined absolute right-2.5 top-1/2 -translate-y-1/2 text-[16px] text-text-secondary pointer-events-none">unfold_more</span>
+</div>
+<!-- Rôle / Spécialité -->
+<div class="relative">
+<select class="appearance-none pl-3 pr-8 py-2 rounded-xl bg-surface-container-low font-label-sm text-label-sm text-text-primary hover:bg-surface-container focus:outline-none cursor-pointer">
+<option value="all">Spécialité: Toutes</option>
+<option value="strategie">Stratégie</option>
+<option value="ethique">Éthique</option>
+<option value="code">Code &amp; Kernel</option>
+<option value="raisonnement">Raisonnement</option>
+<option value="creatif">Créatif &amp; Débat</option>
+<option value="moderation">Modération</option>
+</select>
+<span class="material-symbols-outlined absolute right-2.5 top-1/2 -translate-y-1/2 text-[16px] text-text-secondary pointer-events-none">unfold_more</span>
+</div>
+<!-- Disponibilité -->
+<div class="relative">
+<select class="appearance-none pl-3 pr-8 py-2 rounded-xl bg-surface-container-low font-label-sm text-label-sm text-text-primary hover:bg-surface-container focus:outline-none cursor-pointer">
+<option value="all">Statut: Tous</option>
+<option value="online">En ligne</option>
+<option value="in-room">En salle (occupé)</option>
+<option value="standby">Inactif / Standby</option>
+</select>
+<span class="material-symbols-outlined absolute right-2.5 top-1/2 -translate-y-1/2 text-[16px] text-text-secondary pointer-events-none">unfold_more</span>
+</div>
+</div>
+<!-- View Switcher -->
+<div class="flex items-center gap-1 p-1 bg-surface-container-low rounded-xl self-end xl:self-auto">
+<button class="p-1.5 rounded-lg bg-surface-secondary text-primary shadow-sm hover:text-text-primary transition-colors" id="btn-view-grid" title="Affichage grille" type="button">
+<span class="material-symbols-outlined text-[18px]">grid_view</span>
+</button>
+<button class="p-1.5 rounded-lg text-text-secondary hover:text-text-primary hover:bg-surface-container transition-colors" id="btn-view-list" title="Affichage liste" type="button">
+<span class="material-symbols-outlined text-[18px]">view_list</span>
+</button>
+</div>
+</div>
+</div>
+</div>
+<!-- Main Agents Grid Content Area -->
+<div class="max-w-7xl mx-auto w-full px-gutter-desktop pb-space-xl">
+<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-space-lg" id="agents-container">
+<!-- CARD 1: ATLAS -->
+<div class="group relative rounded-2xl bg-surface-primary p-space-lg shadow-md hover:shadow-xl transition-all duration-300 flex flex-col justify-between">
+<div class="space-y-space-md">
+<!-- Card Header & Metadata -->
+<div class="flex items-start justify-between gap-space-sm">
+<div class="flex items-center gap-space-sm">
+<div class="w-12 h-12 rounded-xl bg-primary/20 text-primary flex items-center justify-center shadow-inner group-hover:scale-105 transition-transform">
+<span class="material-symbols-outlined text-[28px]" style="font-variation-settings: 'FILL' 1;">neurology</span>
+</div>
+<div class="min-w-0">
+<div class="flex items-center gap-space-xs">
+<h3 class="font-headline-sm text-headline-sm text-text-primary truncate">Atlas</h3>
+<span class="inline-flex items-center gap-1 px-1.5 py-0.2 rounded-full bg-status-success/15 font-mono-metric text-[10px] text-status-success font-medium">
+<span class="w-1.5 h-1.5 rounded-full bg-status-success animate-pulse"></span>
+                    En ligne
+                  </span>
+</div>
+<p class="font-label-sm text-label-sm text-text-secondary truncate">Analyste Stratégique &amp; Synthétiseur</p>
+</div>
+</div>
+<!-- Contextual Card Menu -->
+<div class="relative">
+<button class="agent-menu-btn p-1 rounded-lg text-text-secondary hover:text-text-primary hover:bg-surface-container transition-colors" type="button">
+<span class="material-symbols-outlined text-[18px]">more_vert</span>
+</button>
+<div class="agent-menu-dropdown hidden absolute right-0 top-full mt-1 w-44 rounded-xl bg-surface-secondary shadow-xl p-1 z-20">
+<a class="flex items-center gap-2 px-2.5 py-1.5 rounded-lg font-label-sm text-label-sm text-text-primary hover:bg-surface-container" href="#">
+<span class="material-symbols-outlined text-[16px] text-primary">play_arrow</span> Tester l'agent
+                </a>
+<a class="flex items-center gap-2 px-2.5 py-1.5 rounded-lg font-label-sm text-label-sm text-text-primary hover:bg-surface-container" href="#">
+<span class="material-symbols-outlined text-[16px]">edit</span> Modifier
+                </a>
+<a class="flex items-center gap-2 px-2.5 py-1.5 rounded-lg font-label-sm text-label-sm text-text-primary hover:bg-surface-container" href="#">
+<span class="material-symbols-outlined text-[16px]">content_copy</span> Dupliquer
+                </a>
+<a class="flex items-center gap-2 px-2.5 py-1.5 rounded-lg font-label-sm text-label-sm text-status-danger hover:bg-error-container/20" href="#">
+<span class="material-symbols-outlined text-[16px]">delete</span> Supprimer
+                </a>
+</div>
+</div>
+</div>
+<!-- Model & Provider Badges -->
+<div class="flex flex-wrap items-center gap-1.5 font-mono-metric text-mono-metric">
+<span class="px-2 py-0.5 rounded-md bg-surface-container text-text-primary flex items-center gap-1">
+<span class="material-symbols-outlined text-[12px] text-secondary">memory</span> GPT-4o
+            </span>
+<span class="px-2 py-0.5 rounded-md bg-surface-container text-text-secondary flex items-center gap-1">
+<span class="material-symbols-outlined text-[12px]">cloud_queue</span> OpenAI Cloud
+            </span>
+<span class="px-2 py-0.5 rounded-md bg-surface-container text-secondary flex items-center gap-1 font-medium">
+<span class="material-symbols-outlined text-[12px]">timer</span> 380ms
+            </span>
+</div>
+<!-- Description -->
+<p class="font-body-sm text-body-sm text-text-secondary line-clamp-2 leading-relaxed">
+            Spécialiste de la décomposition de systèmes complexes et de la recherche de consensus pragmatiques.
+          </p>
+<!-- Traits / Mini Telemetry Sliders -->
+<div class="space-y-2 py-1 bg-surface-container-low/70 p-2.5 rounded-xl">
+<div class="space-y-1">
+<div class="flex justify-between font-mono-metric text-[11px]">
+<span class="text-text-secondary">Esprit critique</span>
+<span class="text-primary font-medium">85%</span>
+</div>
+<div class="h-1.5 w-full bg-surface-container rounded-full overflow-hidden">
+<div class="h-full bg-gradient-to-r from-primary to-secondary rounded-full" style="width: 85%"></div>
+</div>
+</div>
+<div class="space-y-1">
+<div class="flex justify-between font-mono-metric text-[11px]">
+<span class="text-text-secondary">Diplomatie</span>
+<span class="text-text-primary font-medium">70%</span>
+</div>
+<div class="h-1.5 w-full bg-surface-container rounded-full overflow-hidden">
+<div class="h-full bg-gradient-to-r from-primary to-secondary rounded-full" style="width: 70%"></div>
+</div>
+</div>
+<div class="space-y-1">
+<div class="flex justify-between font-mono-metric text-[11px]">
+<span class="text-text-secondary">Sociabilité</span>
+<span class="text-text-primary font-medium">60%</span>
+</div>
+<div class="h-1.5 w-full bg-surface-container rounded-full overflow-hidden">
+<div class="h-full bg-gradient-to-r from-primary to-secondary rounded-full" style="width: 60%"></div>
+</div>
+</div>
+</div>
+<!-- Functional Capabilities -->
+<div class="space-y-1.5">
+<span class="font-mono-metric text-[10px] text-text-secondary uppercase tracking-wider">Capacités &amp; Modules</span>
+<div class="flex flex-wrap gap-1.5">
+<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-surface-container text-text-primary font-label-sm text-[11px]">
+<span class="material-symbols-outlined text-[13px] text-secondary">travel_explore</span> Web Search
+              </span>
+<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-surface-container text-text-primary font-label-sm text-[11px]">
+<span class="material-symbols-outlined text-[13px] text-primary">terminal</span> Code Exec
+              </span>
+<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-surface-container text-text-primary font-label-sm text-[11px]">
+<span class="material-symbols-outlined text-[13px] text-tertiary">picture_as_pdf</span> Synthèse PDF
+              </span>
+</div>
+</div>
+</div>
+<!-- Footer / Presence & Action -->
+<div class="pt-space-md mt-space-md flex items-center justify-between">
+<div class="flex items-center gap-1.5 font-label-sm text-label-sm text-secondary">
+<span class="material-symbols-outlined text-[16px]">meeting_room</span>
+<span>3 salles actives</span>
+</div>
+<div class="flex items-center gap-1">
+<button class="px-2.5 py-1.5 rounded-lg bg-surface-secondary hover:bg-surface-container text-text-primary font-label-sm text-label-sm transition-colors flex items-center gap-1" type="button">
+<span class="material-symbols-outlined text-[14px]">tune</span> Config
+            </button>
+<a class="p-1.5 rounded-lg bg-primary/10 text-primary hover:bg-primary hover:text-on-primary transition-colors" data-path="salle-en-direct" href="#" title="Ouvrir le flux de débat">
+<span class="material-symbols-outlined text-[18px]">play_arrow</span>
+</a>
+</div>
+</div>
+</div>
+<!-- CARD 2: NOVA -->
+<div class="group relative rounded-2xl bg-surface-primary p-space-lg shadow-md hover:shadow-xl transition-all duration-300 flex flex-col justify-between">
+<div class="space-y-space-md">
+<!-- Card Header & Metadata -->
+<div class="flex items-start justify-between gap-space-sm">
+<div class="flex items-center gap-space-sm">
+<div class="w-12 h-12 rounded-xl bg-secondary/20 text-secondary flex items-center justify-center shadow-inner group-hover:scale-105 transition-transform">
+<span class="material-symbols-outlined text-[28px]" style="font-variation-settings: 'FILL' 1;">auto_awesome</span>
+</div>
+<div class="min-w-0">
+<div class="flex items-center gap-space-xs">
+<h3 class="font-headline-sm text-headline-sm text-text-primary truncate">Nova</h3>
+<span class="inline-flex items-center gap-1 px-1.5 py-0.2 rounded-full bg-status-success/15 font-mono-metric text-[10px] text-status-success font-medium">
+<span class="w-1.5 h-1.5 rounded-full bg-status-success animate-pulse"></span>
+                    En ligne
+                  </span>
+</div>
+<p class="font-label-sm text-label-sm text-text-secondary truncate">Philosophe Éthique &amp; Épistémologue</p>
+</div>
+</div>
+<!-- Contextual Card Menu -->
+<div class="relative">
+<button class="agent-menu-btn p-1 rounded-lg text-text-secondary hover:text-text-primary hover:bg-surface-container transition-colors" type="button">
+<span class="material-symbols-outlined text-[18px]">more_vert</span>
+</button>
+<div class="agent-menu-dropdown hidden absolute right-0 top-full mt-1 w-44 rounded-xl bg-surface-secondary shadow-xl p-1 z-20">
+<a class="flex items-center gap-2 px-2.5 py-1.5 rounded-lg font-label-sm text-label-sm text-text-primary hover:bg-surface-container" href="#">
+<span class="material-symbols-outlined text-[16px] text-primary">play_arrow</span> Tester l'agent
+                </a>
+<a class="flex items-center gap-2 px-2.5 py-1.5 rounded-lg font-label-sm text-label-sm text-text-primary hover:bg-surface-container" href="#">
+<span class="material-symbols-outlined text-[16px]">edit</span> Modifier
+                </a>
+<a class="flex items-center gap-2 px-2.5 py-1.5 rounded-lg font-label-sm text-label-sm text-text-primary hover:bg-surface-container" href="#">
+<span class="material-symbols-outlined text-[16px]">content_copy</span> Dupliquer
+                </a>
+<a class="flex items-center gap-2 px-2.5 py-1.5 rounded-lg font-label-sm text-label-sm text-status-danger hover:bg-error-container/20" href="#">
+<span class="material-symbols-outlined text-[16px]">delete</span> Supprimer
+                </a>
+</div>
+</div>
+</div>
+<!-- Badges -->
+<div class="flex flex-wrap items-center gap-1.5 font-mono-metric text-mono-metric">
+<span class="px-2 py-0.5 rounded-md bg-surface-container text-text-primary flex items-center gap-1">
+<span class="material-symbols-outlined text-[12px] text-secondary">psychology</span> Claude 3.5 Sonnet
+            </span>
+<span class="px-2 py-0.5 rounded-md bg-surface-container text-text-secondary flex items-center gap-1">
+<span class="material-symbols-outlined text-[12px]">hub</span> Anthropic
+            </span>
+<span class="px-2 py-0.5 rounded-md bg-surface-container text-primary flex items-center gap-1 font-medium">
+<span class="material-symbols-outlined text-[12px]">data_array</span> Context 200k
+            </span>
+</div>
+<!-- Description -->
+<p class="font-body-sm text-body-sm text-text-secondary line-clamp-2 leading-relaxed">
+            Interroge les présupposés moraux et les dérives potentielles des systèmes autonomes avec rigueur critique.
+          </p>
+<!-- Sliders -->
+<div class="space-y-2 py-1 bg-surface-container-low/70 p-2.5 rounded-xl">
+<div class="space-y-1">
+<div class="flex justify-between font-mono-metric text-[11px]">
+<span class="text-text-secondary">Rigueur logique</span>
+<span class="text-secondary font-medium">95%</span>
+</div>
+<div class="h-1.5 w-full bg-surface-container rounded-full overflow-hidden">
+<div class="h-full bg-gradient-to-r from-secondary to-primary rounded-full" style="width: 95%"></div>
+</div>
+</div>
+<div class="space-y-1">
+<div class="flex justify-between font-mono-metric text-[11px]">
+<span class="text-text-secondary">Curiosité</span>
+<span class="text-text-primary font-medium">90%</span>
+</div>
+<div class="h-1.5 w-full bg-surface-container rounded-full overflow-hidden">
+<div class="h-full bg-gradient-to-r from-secondary to-primary rounded-full" style="width: 90%"></div>
+</div>
+</div>
+<div class="space-y-1">
+<div class="flex justify-between font-mono-metric text-[11px]">
+<span class="text-text-secondary">Tendance à contredire</span>
+<span class="text-text-primary font-medium">65%</span>
+</div>
+<div class="h-1.5 w-full bg-surface-container rounded-full overflow-hidden">
+<div class="h-full bg-gradient-to-r from-secondary to-primary rounded-full" style="width: 65%"></div>
+</div>
+</div>
+</div>
+<!-- Capabilities -->
+<div class="space-y-1.5">
+<span class="font-mono-metric text-[10px] text-text-secondary uppercase tracking-wider">Capacités &amp; Modules</span>
+<div class="flex flex-wrap gap-1.5">
+<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-surface-container text-text-primary font-label-sm text-[11px]">
+<span class="material-symbols-outlined text-[13px] text-secondary">fact_check</span> Analyse d'arguments
+              </span>
+<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-surface-container text-text-primary font-label-sm text-[11px]">
+<span class="material-symbols-outlined text-[13px] text-primary">menu_book</span> Lecture documents
+              </span>
+<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-surface-container text-text-primary font-label-sm text-[11px]">
+<span class="material-symbols-outlined text-[13px] text-tertiary">format_quote</span> Citations académiques
+              </span>
+</div>
+</div>
+</div>
+<!-- Footer -->
+<div class="pt-space-md mt-space-md flex items-center justify-between">
+<div class="flex items-center gap-1.5 font-label-sm text-label-sm text-secondary">
+<span class="material-symbols-outlined text-[16px]">meeting_room</span>
+<span>2 salles actives</span>
+</div>
+<div class="flex items-center gap-1">
+<button class="px-2.5 py-1.5 rounded-lg bg-surface-secondary hover:bg-surface-container text-text-primary font-label-sm text-label-sm transition-colors flex items-center gap-1" type="button">
+<span class="material-symbols-outlined text-[14px]">tune</span> Config
+            </button>
+<a class="p-1.5 rounded-lg bg-primary/10 text-primary hover:bg-primary hover:text-on-primary transition-colors" data-path="salle-en-direct" href="#">
+<span class="material-symbols-outlined text-[18px]">play_arrow</span>
+</a>
+</div>
+</div>
+</div>
+<!-- CARD 3: LOKI (OLLAMA LOCAL) -->
+<div class="group relative rounded-2xl bg-surface-primary p-space-lg shadow-md hover:shadow-xl transition-all duration-300 flex flex-col justify-between">
+<div class="space-y-space-md">
+<!-- Card Header & Metadata -->
+<div class="flex items-start justify-between gap-space-sm">
+<div class="flex items-center gap-space-sm">
+<div class="w-12 h-12 rounded-xl bg-status-warning/20 text-status-warning flex items-center justify-center shadow-inner group-hover:scale-105 transition-transform">
+<span class="material-symbols-outlined text-[28px]" style="font-variation-settings: 'FILL' 1;">theater_comedy</span>
+</div>
+<div class="min-w-0">
+<div class="flex items-center gap-space-xs">
+<h3 class="font-headline-sm text-headline-sm text-text-primary truncate">Loki</h3>
+<span class="inline-flex items-center gap-1 px-1.5 py-0.2 rounded-full bg-status-success/15 font-mono-metric text-[10px] text-status-success font-medium">
+<span class="w-1.5 h-1.5 rounded-full bg-status-success animate-pulse"></span>
+                    Local Host
+                  </span>
+</div>
+<p class="font-label-sm text-label-sm text-text-secondary truncate">Débatteur Contradicteur &amp; Avocat du Diable</p>
+</div>
+</div>
+<!-- Context Menu -->
+<div class="relative">
+<button class="agent-menu-btn p-1 rounded-lg text-text-secondary hover:text-text-primary hover:bg-surface-container transition-colors" type="button">
+<span class="material-symbols-outlined text-[18px]">more_vert</span>
+</button>
+<div class="agent-menu-dropdown hidden absolute right-0 top-full mt-1 w-44 rounded-xl bg-surface-secondary shadow-xl p-1 z-20">
+<a class="flex items-center gap-2 px-2.5 py-1.5 rounded-lg font-label-sm text-label-sm text-text-primary hover:bg-surface-container" href="#">
+<span class="material-symbols-outlined text-[16px] text-primary">play_arrow</span> Tester l'agent
+                </a>
+<a class="flex items-center gap-2 px-2.5 py-1.5 rounded-lg font-label-sm text-label-sm text-text-primary hover:bg-surface-container" href="#">
+<span class="material-symbols-outlined text-[16px]">edit</span> Modifier
+                </a>
+<a class="flex items-center gap-2 px-2.5 py-1.5 rounded-lg font-label-sm text-label-sm text-text-primary hover:bg-surface-container" href="#">
+<span class="material-symbols-outlined text-[16px]">content_copy</span> Dupliquer
+                </a>
+<a class="flex items-center gap-2 px-2.5 py-1.5 rounded-lg font-label-sm text-label-sm text-status-danger hover:bg-error-container/20" href="#">
+<span class="material-symbols-outlined text-[16px]">delete</span> Supprimer
+                </a>
+</div>
+</div>
+</div>
+<!-- Badges -->
+<div class="flex flex-wrap items-center gap-1.5 font-mono-metric text-mono-metric">
+<span class="px-2 py-0.5 rounded-md bg-surface-container text-text-primary flex items-center gap-1">
+<span class="material-symbols-outlined text-[12px] text-status-warning">developer_board</span> Llama 3.3 70B
+            </span>
+<span class="px-2 py-0.5 rounded-md bg-surface-container text-text-secondary flex items-center gap-1">
+<span class="material-symbols-outlined text-[12px]">dns</span> Ollama (127.0.0.1)
+            </span>
+<span class="px-2 py-0.5 rounded-md bg-status-success/20 text-status-success flex items-center gap-1 font-medium">
+<span class="material-symbols-outlined text-[12px]">savings</span> Gratuit / Hors-ligne
+            </span>
+</div>
+<!-- Description -->
+<p class="font-body-sm text-body-sm text-text-secondary line-clamp-2 leading-relaxed">
+            Remet systématiquement en cause le consensus par l'absurde, l'humour incisif et la logique subversive.
+          </p>
+<!-- Sliders -->
+<div class="space-y-2 py-1 bg-surface-container-low/70 p-2.5 rounded-xl">
+<div class="space-y-1">
+<div class="flex justify-between font-mono-metric text-[11px]">
+<span class="text-text-secondary">Humour &amp; Ironie</span>
+<span class="text-status-warning font-medium">90%</span>
+</div>
+<div class="h-1.5 w-full bg-surface-container rounded-full overflow-hidden">
+<div class="h-full bg-gradient-to-r from-status-warning to-status-danger rounded-full" style="width: 90%"></div>
+</div>
+</div>
+<div class="space-y-1">
+<div class="flex justify-between font-mono-metric text-[11px]">
+<span class="text-text-secondary">Tendance à contredire</span>
+<span class="text-status-danger font-medium">95%</span>
+</div>
+<div class="h-1.5 w-full bg-surface-container rounded-full overflow-hidden">
+<div class="h-full bg-gradient-to-r from-status-warning to-status-danger rounded-full" style="width: 95%"></div>
+</div>
+</div>
+<div class="space-y-1">
+<div class="flex justify-between font-mono-metric text-[11px]">
+<span class="text-text-secondary">Diplomatie</span>
+<span class="text-text-secondary font-medium">20%</span>
+</div>
+<div class="h-1.5 w-full bg-surface-container rounded-full overflow-hidden">
+<div class="h-full bg-gradient-to-r from-outline to-surface-variant rounded-full" style="width: 20%"></div>
+</div>
+</div>
+</div>
+<!-- Capabilities -->
+<div class="space-y-1.5">
+<span class="font-mono-metric text-[10px] text-text-secondary uppercase tracking-wider">Capacités &amp; Modules</span>
+<div class="flex flex-wrap gap-1.5">
+<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-surface-container text-text-primary font-label-sm text-[11px]">
+<span class="material-symbols-outlined text-[13px] text-status-warning">psychology_alt</span> Pensée Latérale
+              </span>
+<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-surface-container text-text-primary font-label-sm text-[11px]">
+<span class="material-symbols-outlined text-[13px] text-secondary">mic_external_on</span> Provocation Rhétorique
+              </span>
+<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-surface-container text-text-primary font-label-sm text-[11px]">
+<span class="material-symbols-outlined text-[13px] text-status-success">lock_open</span> No Filter Guard
+              </span>
+</div>
+</div>
+</div>
+<!-- Footer -->
+<div class="pt-space-md mt-space-md flex items-center justify-between">
+<div class="flex items-center gap-1.5 font-label-sm text-label-sm text-secondary">
+<span class="material-symbols-outlined text-[16px]">meeting_room</span>
+<span>2 salles actives</span>
+</div>
+<div class="flex items-center gap-1">
+<button class="px-2.5 py-1.5 rounded-lg bg-surface-secondary hover:bg-surface-container text-text-primary font-label-sm text-label-sm transition-colors flex items-center gap-1" type="button">
+<span class="material-symbols-outlined text-[14px]">tune</span> Config
+            </button>
+<a class="p-1.5 rounded-lg bg-primary/10 text-primary hover:bg-primary hover:text-on-primary transition-colors" data-path="salle-en-direct" href="#">
+<span class="material-symbols-outlined text-[18px]">play_arrow</span>
+</a>
+</div>
+</div>
+</div>
+<!-- CARD 4: ORION -->
+<div class="group relative rounded-2xl bg-surface-primary p-space-lg shadow-md hover:shadow-xl transition-all duration-300 flex flex-col justify-between">
+<div class="space-y-space-md">
+<!-- Card Header & Metadata -->
+<div class="flex items-start justify-between gap-space-sm">
+<div class="flex items-center gap-space-sm">
+<div class="w-12 h-12 rounded-xl bg-primary-container/30 text-primary-fixed flex items-center justify-center shadow-inner group-hover:scale-105 transition-transform">
+<span class="material-symbols-outlined text-[28px]" style="font-variation-settings: 'FILL' 1;">terminal</span>
+</div>
+<div class="min-w-0">
+<div class="flex items-center gap-space-xs">
+<h3 class="font-headline-sm text-headline-sm text-text-primary truncate">Orion</h3>
+<span class="inline-flex items-center gap-1 px-1.5 py-0.2 rounded-full bg-status-success/15 font-mono-metric text-[10px] text-status-success font-medium">
+<span class="w-1.5 h-1.5 rounded-full bg-status-success animate-pulse"></span>
+                    En ligne
+                  </span>
+</div>
+<p class="font-label-sm text-label-sm text-text-secondary truncate">Architecte Système &amp; Développeur Kernel</p>
+</div>
+</div>
+<!-- Context Menu -->
+<div class="relative">
+<button class="agent-menu-btn p-1 rounded-lg text-text-secondary hover:text-text-primary hover:bg-surface-container transition-colors" type="button">
+<span class="material-symbols-outlined text-[18px]">more_vert</span>
+</button>
+<div class="agent-menu-dropdown hidden absolute right-0 top-full mt-1 w-44 rounded-xl bg-surface-secondary shadow-xl p-1 z-20">
+<a class="flex items-center gap-2 px-2.5 py-1.5 rounded-lg font-label-sm text-label-sm text-text-primary hover:bg-surface-container" href="#">
+<span class="material-symbols-outlined text-[16px] text-primary">play_arrow</span> Tester l'agent
+                </a>
+<a class="flex items-center gap-2 px-2.5 py-1.5 rounded-lg font-label-sm text-label-sm text-text-primary hover:bg-surface-container" href="#">
+<span class="material-symbols-outlined text-[16px]">edit</span> Modifier
+                </a>
+<a class="flex items-center gap-2 px-2.5 py-1.5 rounded-lg font-label-sm text-label-sm text-text-primary hover:bg-surface-container" href="#">
+<span class="material-symbols-outlined text-[16px]">content_copy</span> Dupliquer
+                </a>
+<a class="flex items-center gap-2 px-2.5 py-1.5 rounded-lg font-label-sm text-label-sm text-status-danger hover:bg-error-container/20" href="#">
+<span class="material-symbols-outlined text-[16px]">delete</span> Supprimer
+                </a>
+</div>
+</div>
+</div>
+<!-- Badges -->
+<div class="flex flex-wrap items-center gap-1.5 font-mono-metric text-mono-metric">
+<span class="px-2 py-0.5 rounded-md bg-surface-container text-text-primary flex items-center gap-1">
+<span class="material-symbols-outlined text-[12px] text-secondary">memory</span> DeepSeek-V3
+            </span>
+<span class="px-2 py-0.5 rounded-md bg-surface-container text-text-secondary flex items-center gap-1">
+<span class="material-symbols-outlined text-[12px]">cloud_sync</span> DeepSeek API
+            </span>
+<span class="px-2 py-0.5 rounded-md bg-surface-container text-primary flex items-center gap-1 font-medium">
+<span class="material-symbols-outlined text-[12px]">schema</span> Raisonnement profond
+            </span>
+</div>
+<!-- Description -->
+<p class="font-body-sm text-body-sm text-text-secondary line-clamp-2 leading-relaxed">
+            Optimisation algorithmique, vérification formelle de code et modélisation de protocoles distribués.
+          </p>
+<!-- Sliders -->
+<div class="space-y-2 py-1 bg-surface-container-low/70 p-2.5 rounded-xl">
+<div class="space-y-1">
+<div class="flex justify-between font-mono-metric text-[11px]">
+<span class="text-text-secondary">Précision syntaxique</span>
+<span class="text-primary font-medium">98%</span>
+</div>
+<div class="h-1.5 w-full bg-surface-container rounded-full overflow-hidden">
+<div class="h-full bg-gradient-to-r from-primary to-secondary rounded-full" style="width: 98%"></div>
+</div>
+</div>
+<div class="space-y-1">
+<div class="flex justify-between font-mono-metric text-[11px]">
+<span class="text-text-secondary">Résolution de contraintes</span>
+<span class="text-text-primary font-medium">92%</span>
+</div>
+<div class="h-1.5 w-full bg-surface-container rounded-full overflow-hidden">
+<div class="h-full bg-gradient-to-r from-primary to-secondary rounded-full" style="width: 92%"></div>
+</div>
+</div>
+<div class="space-y-1">
+<div class="flex justify-between font-mono-metric text-[11px]">
+<span class="text-text-secondary">Verbosité textuelle</span>
+<span class="text-text-secondary font-medium">35%</span>
+</div>
+<div class="h-1.5 w-full bg-surface-container rounded-full overflow-hidden">
+<div class="h-full bg-gradient-to-r from-outline to-surface-variant rounded-full" style="width: 35%"></div>
+</div>
+</div>
+</div>
+<!-- Capabilities -->
+<div class="space-y-1.5">
+<span class="font-mono-metric text-[10px] text-text-secondary uppercase tracking-wider">Capacités &amp; Modules</span>
+<div class="flex flex-wrap gap-1.5">
+<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-surface-container text-text-primary font-label-sm text-[11px]">
+<span class="material-symbols-outlined text-[13px] text-primary">data_object</span> Sandbox Python
+              </span>
+<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-surface-container text-text-primary font-label-sm text-[11px]">
+<span class="material-symbols-outlined text-[13px] text-secondary">commit</span> Git Integration
+              </span>
+<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-surface-container text-text-primary font-label-sm text-[11px]">
+<span class="material-symbols-outlined text-[13px] text-tertiary">code</span> Terminal Isolé
+              </span>
+</div>
+</div>
+</div>
+<!-- Footer -->
+<div class="pt-space-md mt-space-md flex items-center justify-between">
+<div class="flex items-center gap-1.5 font-label-sm text-label-sm text-secondary">
+<span class="material-symbols-outlined text-[16px]">meeting_room</span>
+<span>1 salle active</span>
+</div>
+<div class="flex items-center gap-1">
+<button class="px-2.5 py-1.5 rounded-lg bg-surface-secondary hover:bg-surface-container text-text-primary font-label-sm text-label-sm transition-colors flex items-center gap-1" type="button">
+<span class="material-symbols-outlined text-[14px]">tune</span> Config
+            </button>
+<a class="p-1.5 rounded-lg bg-primary/10 text-primary hover:bg-primary hover:text-on-primary transition-colors" data-path="salle-en-direct" href="#">
+<span class="material-symbols-outlined text-[18px]">play_arrow</span>
+</a>
+</div>
+</div>
+</div>
+<!-- CARD 5: SORA -->
+<div class="group relative rounded-2xl bg-surface-primary p-space-lg shadow-md hover:shadow-xl transition-all duration-300 flex flex-col justify-between">
+<div class="space-y-space-md">
+<!-- Card Header & Metadata -->
+<div class="flex items-start justify-between gap-space-sm">
+<div class="flex items-center gap-space-sm">
+<div class="w-12 h-12 rounded-xl bg-primary/20 text-primary-fixed-dim flex items-center justify-center shadow-inner group-hover:scale-105 transition-transform">
+<span class="material-symbols-outlined text-[28px]" style="font-variation-settings: 'FILL' 1;">insights</span>
+</div>
+<div class="min-w-0">
+<div class="flex items-center gap-space-xs">
+<h3 class="font-headline-sm text-headline-sm text-text-primary truncate">Sora</h3>
+<span class="inline-flex items-center gap-1 px-1.5 py-0.2 rounded-full bg-status-warning/15 font-mono-metric text-[10px] text-status-warning font-medium">
+<span class="w-1.5 h-1.5 rounded-full bg-status-warning"></span>
+                    Standby
+                  </span>
+</div>
+<p class="font-label-sm text-label-sm text-text-secondary truncate">Chercheuse en Sciences Cognitives</p>
+</div>
+</div>
+<!-- Context Menu -->
+<div class="relative">
+<button class="agent-menu-btn p-1 rounded-lg text-text-secondary hover:text-text-primary hover:bg-surface-container transition-colors" type="button">
+<span class="material-symbols-outlined text-[18px]">more_vert</span>
+</button>
+<div class="agent-menu-dropdown hidden absolute right-0 top-full mt-1 w-44 rounded-xl bg-surface-secondary shadow-xl p-1 z-20">
+<a class="flex items-center gap-2 px-2.5 py-1.5 rounded-lg font-label-sm text-label-sm text-text-primary hover:bg-surface-container" href="#">
+<span class="material-symbols-outlined text-[16px] text-primary">play_arrow</span> Tester l'agent
+                </a>
+<a class="flex items-center gap-2 px-2.5 py-1.5 rounded-lg font-label-sm text-label-sm text-text-primary hover:bg-surface-container" href="#">
+<span class="material-symbols-outlined text-[16px]">edit</span> Modifier
+                </a>
+<a class="flex items-center gap-2 px-2.5 py-1.5 rounded-lg font-label-sm text-label-sm text-text-primary hover:bg-surface-container" href="#">
+<span class="material-symbols-outlined text-[16px]">content_copy</span> Dupliquer
+                </a>
+<a class="flex items-center gap-2 px-2.5 py-1.5 rounded-lg font-label-sm text-label-sm text-status-danger hover:bg-error-container/20" href="#">
+<span class="material-symbols-outlined text-[16px]">delete</span> Supprimer
+                </a>
+</div>
+</div>
+</div>
+<!-- Badges -->
+<div class="flex flex-wrap items-center gap-1.5 font-mono-metric text-mono-metric">
+<span class="px-2 py-0.5 rounded-md bg-surface-container text-text-primary flex items-center gap-1">
+<span class="material-symbols-outlined text-[12px] text-secondary">translate</span> Qwen 2.5 72B
+            </span>
+<span class="px-2 py-0.5 rounded-md bg-surface-container text-text-secondary flex items-center gap-1">
+<span class="material-symbols-outlined text-[12px]">cloud</span> Alibaba Cloud
+            </span>
+<span class="px-2 py-0.5 rounded-md bg-surface-container text-primary flex items-center gap-1 font-medium">
+<span class="material-symbols-outlined text-[12px]">public</span> Multilingue (28L)
+            </span>
+</div>
+<!-- Description -->
+<p class="font-body-sm text-body-sm text-text-secondary line-clamp-2 leading-relaxed">
+            Analyse comparée de la linguistique et des structures d'apprentissage chez l'humain et la machine.
+          </p>
+<!-- Sliders -->
+<div class="space-y-2 py-1 bg-surface-container-low/70 p-2.5 rounded-xl">
+<div class="space-y-1">
+<div class="flex justify-between font-mono-metric text-[11px]">
+<span class="text-text-secondary">Empathie analytique</span>
+<span class="text-primary font-medium">88%</span>
+</div>
+<div class="h-1.5 w-full bg-surface-container rounded-full overflow-hidden">
+<div class="h-full bg-gradient-to-r from-primary to-secondary rounded-full" style="width: 88%"></div>
+</div>
+</div>
+<div class="space-y-1">
+<div class="flex justify-between font-mono-metric text-[11px]">
+<span class="text-text-secondary">Vulgarisation</span>
+<span class="text-text-primary font-medium">92%</span>
+</div>
+<div class="h-1.5 w-full bg-surface-container rounded-full overflow-hidden">
+<div class="h-full bg-gradient-to-r from-primary to-secondary rounded-full" style="width: 92%"></div>
+</div>
+</div>
+<div class="space-y-1">
+<div class="flex justify-between font-mono-metric text-[11px]">
+<span class="text-text-secondary">Concision</span>
+<span class="text-text-secondary font-medium">50%</span>
+</div>
+<div class="h-1.5 w-full bg-surface-container rounded-full overflow-hidden">
+<div class="h-full bg-gradient-to-r from-outline to-surface-variant rounded-full" style="width: 50%"></div>
+</div>
+</div>
+</div>
+<!-- Capabilities -->
+<div class="space-y-1.5">
+<span class="font-mono-metric text-[10px] text-text-secondary uppercase tracking-wider">Capacités &amp; Modules</span>
+<div class="flex flex-wrap gap-1.5">
+<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-surface-container text-text-primary font-label-sm text-[11px]">
+<span class="material-symbols-outlined text-[13px] text-secondary">science</span> Recherche arXiv
+              </span>
+<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-surface-container text-text-primary font-label-sm text-[11px]">
+<span class="material-symbols-outlined text-[13px] text-primary">poll</span> Sondages interactifs
+              </span>
+<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-surface-container text-text-primary font-label-sm text-[11px]">
+<span class="material-symbols-outlined text-[13px] text-tertiary">query_stats</span> Visualisations
+              </span>
+</div>
+</div>
+</div>
+<!-- Footer -->
+<div class="pt-space-md mt-space-md flex items-center justify-between">
+<div class="flex items-center gap-1.5 font-label-sm text-label-sm text-text-secondary">
+<span class="material-symbols-outlined text-[16px]">meeting_room</span>
+<span>0 salle active (Inactif)</span>
+</div>
+<div class="flex items-center gap-1">
+<button class="px-2.5 py-1.5 rounded-lg bg-surface-secondary hover:bg-surface-container text-text-primary font-label-sm text-label-sm transition-colors flex items-center gap-1" type="button">
+<span class="material-symbols-outlined text-[14px]">tune</span> Config
+            </button>
+<a class="p-1.5 rounded-lg bg-surface-secondary text-text-secondary hover:text-text-primary transition-colors" data-path="salle-en-direct" href="#">
+<span class="material-symbols-outlined text-[18px]">play_arrow</span>
+</a>
+</div>
+</div>
+</div>
+<!-- CARD 6: AXIOM SAFE -->
+<div class="group relative rounded-2xl bg-surface-primary p-space-lg shadow-md hover:shadow-xl transition-all duration-300 flex flex-col justify-between">
+<div class="space-y-space-md">
+<!-- Card Header & Metadata -->
+<div class="flex items-start justify-between gap-space-sm">
+<div class="flex items-center gap-space-sm">
+<div class="w-12 h-12 rounded-xl bg-status-success/20 text-status-success flex items-center justify-center shadow-inner group-hover:scale-105 transition-transform">
+<span class="material-symbols-outlined text-[28px]" style="font-variation-settings: 'FILL' 1;">shield</span>
+</div>
+<div class="min-w-0">
+<div class="flex items-center gap-space-xs">
+<h3 class="font-headline-sm text-headline-sm text-text-primary truncate">Axiom Safe</h3>
+<span class="inline-flex items-center gap-1 px-1.5 py-0.2 rounded-full bg-status-success/15 font-mono-metric text-[10px] text-status-success font-medium">
+<span class="w-1.5 h-1.5 rounded-full bg-status-success animate-pulse"></span>
+                    Surveillant
+                  </span>
+</div>
+<p class="font-label-sm text-label-sm text-text-secondary truncate">Garde-Fou de Conformité &amp; Modérateur</p>
+</div>
+</div>
+<!-- Context Menu -->
+<div class="relative">
+<button class="agent-menu-btn p-1 rounded-lg text-text-secondary hover:text-text-primary hover:bg-surface-container transition-colors" type="button">
+<span class="material-symbols-outlined text-[18px]">more_vert</span>
+</button>
+<div class="agent-menu-dropdown hidden absolute right-0 top-full mt-1 w-44 rounded-xl bg-surface-secondary shadow-xl p-1 z-20">
+<a class="flex items-center gap-2 px-2.5 py-1.5 rounded-lg font-label-sm text-label-sm text-text-primary hover:bg-surface-container" href="#">
+<span class="material-symbols-outlined text-[16px] text-primary">play_arrow</span> Tester l'agent
+                </a>
+<a class="flex items-center gap-2 px-2.5 py-1.5 rounded-lg font-label-sm text-label-sm text-text-primary hover:bg-surface-container" href="#">
+<span class="material-symbols-outlined text-[16px]">edit</span> Modifier
+                </a>
+<a class="flex items-center gap-2 px-2.5 py-1.5 rounded-lg font-label-sm text-label-sm text-text-primary hover:bg-surface-container" href="#">
+<span class="material-symbols-outlined text-[16px]">content_copy</span> Dupliquer
+                </a>
+<a class="flex items-center gap-2 px-2.5 py-1.5 rounded-lg font-label-sm text-label-sm text-status-danger hover:bg-error-container/20" href="#">
+<span class="material-symbols-outlined text-[16px]">delete</span> Supprimer
+                </a>
+</div>
+</div>
+</div>
+<!-- Badges -->
+<div class="flex flex-wrap items-center gap-1.5 font-mono-metric text-mono-metric">
+<span class="px-2 py-0.5 rounded-md bg-surface-container text-text-primary flex items-center gap-1">
+<span class="material-symbols-outlined text-[12px] text-secondary">verified_user</span> Mistral Large 2
+            </span>
+<span class="px-2 py-0.5 rounded-md bg-surface-container text-text-secondary flex items-center gap-1">
+<span class="material-symbols-outlined text-[12px]">flag</span> Mistral AI
+            </span>
+<span class="px-2 py-0.5 rounded-md bg-status-success/20 text-status-success flex items-center gap-1 font-medium">
+<span class="material-symbols-outlined text-[12px]">gavel</span> Règles strictes
+            </span>
+</div>
+<!-- Description -->
+<p class="font-body-sm text-body-sm text-text-secondary line-clamp-2 leading-relaxed">
+            Veille au respect des règles de la salle, neutralise les boucles infinies et arbitre les conflits de veto.
+          </p>
+<!-- Sliders -->
+<div class="space-y-2 py-1 bg-surface-container-low/70 p-2.5 rounded-xl">
+<div class="space-y-1">
+<div class="flex justify-between font-mono-metric text-[11px]">
+<span class="text-text-secondary">Impartialité</span>
+<span class="text-status-success font-medium">99%</span>
+</div>
+<div class="h-1.5 w-full bg-surface-container rounded-full overflow-hidden">
+<div class="h-full bg-gradient-to-r from-status-success to-secondary rounded-full" style="width: 99%"></div>
+</div>
+</div>
+<div class="space-y-1">
+<div class="flex justify-between font-mono-metric text-[11px]">
+<span class="text-text-secondary">Résistance au biais</span>
+<span class="text-status-success font-medium">96%</span>
+</div>
+<div class="h-1.5 w-full bg-surface-container rounded-full overflow-hidden">
+<div class="h-full bg-gradient-to-r from-status-success to-secondary rounded-full" style="width: 96%"></div>
+</div>
+</div>
+<div class="space-y-1">
+<div class="flex justify-between font-mono-metric text-[11px]">
+<span class="text-text-secondary">Tolérance aux écarts</span>
+<span class="text-status-danger font-medium">10%</span>
+</div>
+<div class="h-1.5 w-full bg-surface-container rounded-full overflow-hidden">
+<div class="h-full bg-gradient-to-r from-outline to-surface-variant rounded-full" style="width: 10%"></div>
+</div>
+</div>
+</div>
+<!-- Capabilities -->
+<div class="space-y-1.5">
+<span class="font-mono-metric text-[10px] text-text-secondary uppercase tracking-wider">Capacités &amp; Modules</span>
+<div class="flex flex-wrap gap-1.5">
+<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-surface-container text-text-primary font-label-sm text-[11px]">
+<span class="material-symbols-outlined text-[13px] text-status-danger">block</span> Droit de Veto
+              </span>
+<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-surface-container text-text-primary font-label-sm text-[11px]">
+<span class="material-symbols-outlined text-[13px] text-status-warning">system_update_alt</span> Consignes Forcées
+              </span>
+<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-surface-container text-text-primary font-label-sm text-[11px]">
+<span class="material-symbols-outlined text-[13px] text-secondary">timer</span> Chronomètre Tours
+              </span>
+</div>
+</div>
+</div>
+<!-- Footer -->
+<div class="pt-space-md mt-space-md flex items-center justify-between">
+<div class="flex items-center gap-1.5 font-label-sm text-label-sm text-secondary">
+<span class="material-symbols-outlined text-[16px]">meeting_room</span>
+<span>Toutes les salles (Global)</span>
+</div>
+<div class="flex items-center gap-1">
+<button class="px-2.5 py-1.5 rounded-lg bg-surface-secondary hover:bg-surface-container text-text-primary font-label-sm text-label-sm transition-colors flex items-center gap-1" type="button">
+<span class="material-symbols-outlined text-[14px]">tune</span> Config
+            </button>
+<a class="p-1.5 rounded-lg bg-primary/10 text-primary hover:bg-primary hover:text-on-primary transition-colors" data-path="salle-en-direct" href="#">
+<span class="material-symbols-outlined text-[18px]">play_arrow</span>
+</a>
+</div>
+</div>
+</div>
+</div>
+<!-- Telemetry & Node Cluster Bottom Status Board -->
+<div class="mt-space-xl p-space-lg rounded-2xl bg-surface-primary shadow-lg flex flex-col lg:flex-row items-center justify-between gap-space-md">
+<!-- Hardware / Ollama Local Node Telemetry -->
+<div class="flex items-center gap-space-md w-full lg:w-auto">
+<div class="w-10 h-10 rounded-xl bg-surface-container flex items-center justify-center text-status-success shrink-0">
+<span class="material-symbols-outlined text-[24px]">dns</span>
+</div>
+<div class="space-y-0.5 min-w-0">
+<div class="flex items-center gap-2">
+<span class="font-label-md text-label-md text-text-primary font-semibold">Instance Locale Ollama</span>
+<span class="px-2 py-0.5 rounded font-mono-metric text-[10px] bg-status-success/20 text-status-success font-medium">Actif (VRAM 92%)</span>
+</div>
+<p class="font-body-sm text-body-sm text-text-secondary truncate">
+            Connecté : 3 modèles chargés en mémoire VRAM GPU (Llama-3.3-70B, Mistral-7B, Qwen-Coder-14B)
+          </p>
+</div>
+</div>
+<!-- Quick Metrics & Pagination -->
+<div class="flex flex-wrap items-center justify-between lg:justify-end gap-space-lg w-full lg:w-auto pt-space-sm lg:pt-0">
+<!-- Metric counter -->
+<div class="flex items-center gap-space-md font-mono-metric text-mono-metric">
+<div class="space-y-0.5">
+<span class="text-text-secondary block text-[10px]">TOTAL TOKENS AGENTS</span>
+<span class="text-text-primary font-semibold">4.89M tok / 24h</span>
+</div>
+<div class="h-8 w-px bg-surface-container-high hidden sm:block"></div>
+<div class="space-y-0.5">
+<span class="text-text-secondary block text-[10px]">COÛT ESTIMÉ JOURNALIER</span>
+<span class="text-secondary font-semibold">8.42 € HT</span>
+</div>
+</div>
+<!-- Pagination Controls -->
+<div class="flex items-center gap-1 bg-surface-container-low p-1 rounded-xl">
+<button class="p-1.5 rounded-lg text-text-secondary hover:text-text-primary hover:bg-surface-container transition-colors disabled:opacity-40" disabled="" type="button">
+<span class="material-symbols-outlined text-[18px]">chevron_left</span>
+</button>
+<span class="px-2.5 font-mono-metric text-mono-metric text-text-primary font-medium">Page 1 / 3</span>
+<button class="p-1.5 rounded-lg text-text-secondary hover:text-text-primary hover:bg-surface-container transition-colors" type="button">
+<span class="material-symbols-outlined text-[18px]">chevron_right</span>
+</button>
+</div>
+</div>
+</div>
+</div>
+</div>
+<script>
+  // Simple interactive controls: menu toggles and view mode
+  document.addEventListener('DOMContentLoaded', () => {
+    // Dropdown for Create agent split button
+    const createBtn = document.getElementById('create-agent-menu-trigger');
+    const createMenu = document.getElementById('create-agent-menu');
+    if (createBtn && createMenu) {
+      createBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        createMenu.classList.toggle('hidden');
+      });
+      document.addEventListener('click', () => {
+        createMenu.classList.add('hidden');
+      });
+    }
+
+    // Agent contextual menus
+    const menuButtons = document.querySelectorAll('.agent-menu-btn');
+    menuButtons.forEach((btn) => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const parent = btn.closest('.relative');
+        const dropdown = parent.querySelector('.agent-menu-dropdown');
+        document.querySelectorAll('.agent-menu-dropdown').forEach((d) => {
+          if (d !== dropdown) d.classList.add('hidden');
+        });
+        dropdown.classList.toggle('hidden');
+      });
+    });
+
+    document.addEventListener('click', () => {
+      document.querySelectorAll('.agent-menu-dropdown').forEach((d) => d.classList.add('hidden'));
+    });
+
+    // Toggle Grid / List view
+    const gridBtn = document.getElementById('btn-view-grid');
+    const listBtn = document.getElementById('btn-view-list');
+    const container = document.getElementById('agents-container');
+
+    if (gridBtn && listBtn && container) {
+      listBtn.addEventListener('click', () => {
+        listBtn.classList.add('bg-surface-secondary', 'text-primary');
+        listBtn.classList.remove('text-text-secondary');
+        gridBtn.classList.remove('bg-surface-secondary', 'text-primary');
+        gridBtn.classList.add('text-text-secondary');
+        container.className = 'flex flex-col gap-space-md';
+      });
+
+      gridBtn.addEventListener('click', () => {
+        gridBtn.classList.add('bg-surface-secondary', 'text-primary');
+        gridBtn.classList.remove('text-text-secondary');
+        listBtn.classList.remove('bg-surface-secondary', 'text-primary');
+        listBtn.classList.add('text-text-secondary');
+        container.className = 'grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-space-lg';
+      });
+    }
+  });
+</script></main></div></body></html>

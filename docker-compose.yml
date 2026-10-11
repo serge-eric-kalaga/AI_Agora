@@ -1,0 +1,82 @@
+services:
+
+  mysql:
+    image: mysql:latest
+    restart: always
+    # volumes:
+    #   - ./mysql/data:/var/lib/mysql
+    expose:
+      - 3306
+    networks:
+      - asgard
+      - monitor
+    healthcheck:
+      test: [ "CMD", "mysqladmin", "ping", "-h", "mysql" ]
+      interval: 5s
+      timeout: 30s
+      retries: 10
+    env_file:
+      - ./.env.dev
+
+  backend:
+    build: ./backend
+    restart: always
+    volumes:
+      - ./backend/:/app/
+    expose:
+      - 80
+    ports:
+      - "8080:80"
+    depends_on:
+      mysql:
+        condition: service_healthy
+    networks:
+      - thor
+      - asgard
+      - loky
+      - monitor
+    env_file:
+      - ./.env.dev
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "200k"
+        max-file: "10"
+    healthcheck:
+      test: curl -f http://localhost/api/v1/healthcheck/ || exit 1
+      interval: 5m30s
+      timeout: 30s
+      retries: 3
+      start_period: 30s
+
+  phpmyadmin:
+    image: phpmyadmin:latest
+    restart: always
+    ports:
+      - "8081:80"
+    links:
+      - mysql
+    depends_on:
+      mysql:
+        condition: service_healthy
+    networks:
+      - asgard
+    env_file:
+      - ./.env.dev
+
+  redis:
+    image: redis:latest
+    restart: always
+    env_file:
+      - ./.env.dev
+    networks:
+      - loky
+    expose:
+      - 6379
+
+networks:
+  asgard:
+  thor:
+  loky:
+  monitor:
+
