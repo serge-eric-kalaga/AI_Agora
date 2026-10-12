@@ -29,7 +29,12 @@ from api.services.orchestration import (
     execute_room_turn,
     record_room_failure,
 )
-from api.tasks import RoomTurnBusy, _execute_with_room_lock
+from api.tasks import (
+    RoomTurnBusy,
+    _execute_with_room_lock,
+    continue_room_turn,
+    schedule_room_turn,
+)
 
 
 def _agent_payload(provider_id: str, name: str) -> dict[str, object]:
@@ -388,6 +393,68 @@ def test_room_turn_lock_rejects_concurrent_generation(monkeypatch) -> None:
 
     with pytest.raises(RoomTurnBusy):
         _execute_with_room_lock(uuid4(), uuid4())
+
+
+def test_autonomous_chain_continues_beyond_previous_limit(monkeypatch) -> None:
+    """La profondeur historique ne doit plus interrompre une salle active."""
+
+    room_id = uuid4()
+    next_event_id = uuid4()
+    scheduled: list[tuple[str, str, int]] = []
+    monkeypatch.setattr(
+        "api.tasks._execute_with_room_lock",
+        lambda _room_id, _event_id: {
+            "status": "completed",
+            "roomId": str(room_id),
+            "eventId": str(next_event_id),
+            "chainDepth": "999",
+        },
+    )
+    monkeypatch.setattr(
+        "api.tasks.schedule_room_turn",
+        lambda current_room_id, event_id, *, countdown=0, force=False: scheduled.append(
+            (current_room_id, event_id, countdown)
+        )
+        or True,
+    )
+
+    result = continue_room_turn.run(str(room_id), str(uuid4()))
+
+    assert result["status"] == "completed"
+    assert scheduled == [(str(room_id), str(next_event_id), 4)]
+
+
+def test_schedule_room_turn_deduplicates_same_event(monkeypatch) -> None:
+    """Deux retries du même événement ne doivent pas créer deux boucles autonomes."""
+
+    markers: set[str] = set()
+    scheduled: list[tuple[list[str], int]] = []
+
+    class FakeRedis:
+        def set(self, key: str, _value: str, *, nx: bool = False, ex: int) -> bool:
+            if nx and key in markers:
+                return False
+            markers.add(key)
+            return True
+
+        def delete(self, key: str) -> None:
+            markers.discard(key)
+
+        def close(self) -> None:
+            return None
+
+    monkeypatch.setattr("api.tasks.Redis.from_url", lambda _url: FakeRedis())
+    monkeypatch.setattr(
+        continue_room_turn,
+        "apply_async",
+        lambda *, args, countdown: scheduled.append((args, countdown)),
+    )
+    room_id = str(uuid4())
+    event_id = str(uuid4())
+
+    assert schedule_room_turn(room_id, event_id, countdown=3) is True
+    assert schedule_room_turn(room_id, event_id, countdown=3) is False
+    assert scheduled == [([room_id, event_id], 3)]
 
 
 def test_provider_diagnostic_refreshes_discovered_models(

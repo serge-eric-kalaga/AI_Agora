@@ -1,5 +1,6 @@
 """Orchestration idempotente d'une réponse d'agent dans une salle."""
 
+import hashlib
 import re
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
@@ -62,6 +63,27 @@ def _reaction_for(content: str) -> str:
     if any(word in normalized for word in ("solidarité", "soutien", "courage", "paix")):
         return "❤️"
     return "👍"
+
+
+def _stable_entropy(trigger_event_id: UUID, agent_id: UUID) -> int:
+    """Produit un départage stable sans imposer un ordre alphabétique répétitif."""
+
+    digest = hashlib.sha256(f"{trigger_event_id}:{agent_id}".encode()).digest()
+    return int.from_bytes(digest[:8], "big")
+
+
+def _initiative_for(trigger_event_id: UUID) -> str:
+    """Varie la manière d'entreprendre le prochain mouvement de conversation."""
+
+    initiatives = (
+        "Réponds au point le plus important, puis apporte une nuance personnelle.",
+        "Pose une question sincère à un autre participant pour faire avancer l'échange.",
+        "Introduis un angle nouveau mais directement lié au sujet actuel.",
+        "Relie le dernier message à une idée exprimée plus tôt dans la conversation.",
+        "Exprime un désaccord respectueux ou une réserve utile si le contexte s'y prête.",
+        "Fais une synthèse très brève, puis propose naturellement la prochaine piste à explorer.",
+    )
+    return initiatives[trigger_event_id.int % len(initiatives)]
 
 
 def _clean_generated_content(content: str, participant_names: tuple[str, ...]) -> str:
@@ -156,6 +178,16 @@ def _prepare_turn(room_id: UUID, trigger_event_id: UUID) -> TurnContext | None:
             trigger_message.author_user_id is None and trigger_message.author_agent_id is None
         ):
             return None
+        latest_message_id = db.scalar(
+            select(Message.id)
+            .where(Message.room_id == room.id)
+            .order_by(Message.created_at.desc(), Message.id.desc())
+            .limit(1)
+        )
+        # Un nouveau message humain ou agent prend immédiatement la main sur une
+        # ancienne tâche planifiée. Une salle ne conserve ainsi qu'un seul fil autonome.
+        if latest_message_id != trigger_message.id:
+            return None
         raw_depth = event.payload.get("chainDepth", 0)
         chain_depth = raw_depth if isinstance(raw_depth, int) and raw_depth >= 0 else 0
         idempotency_key = f"agent-turn:{trigger_event_id}"
@@ -190,6 +222,14 @@ def _prepare_turn(room_id: UUID, trigger_event_id: UUID) -> TurnContext | None:
             .group_by(Message.author_agent_id)
         ).all()
         contributions = {agent_id: count for agent_id, count in contribution_rows}
+        recent_speakers = list(
+            db.scalars(
+                select(Message.author_agent_id)
+                .where(Message.room_id == room.id, Message.author_agent_id.is_not(None))
+                .order_by(Message.created_at.desc(), Message.id.desc())
+                .limit(4)
+            )
+        )
         content = trigger_message.content.casefold()
         mentioned_agent_ids = {
             item[0].id for item in participants if f"@{item[0].name.casefold()}" in content
@@ -210,14 +250,20 @@ def _prepare_turn(room_id: UUID, trigger_event_id: UUID) -> TurnContext | None:
                 reply_target_id = quoted_message.author_agent_id
 
         # Une mention explicite prime, puis l'agent cité par une réponse humaine.
-        # Sans destinataire, l'agent ayant le moins contribué est favorisé.
+        # Sinon les participants les moins entendus sont favorisés, avec un
+        # départage stable mais varié et une pénalité pour les prises de parole récentes.
         agent, provider = min(
             participants,
             key=lambda item: (
                 0 if item[0].id in mentioned_agent_ids or item[0].id == reply_target_id else 1,
                 1 if item[0].id == trigger_message.author_agent_id else 0,
                 contributions.get(item[0].id, 0),
-                item[0].name.casefold(),
+                (
+                    len(recent_speakers) - recent_speakers.index(item[0].id)
+                    if item[0].id in recent_speakers
+                    else 0
+                ),
+                _stable_entropy(trigger_event_id, item[0].id),
             ),
         )
         names = {item.id: item.name for item, _ in participants}
@@ -225,7 +271,10 @@ def _prepare_turn(room_id: UUID, trigger_event_id: UUID) -> TurnContext | None:
             trigger_author = f"l’agent « {names.get(trigger_message.author_agent_id, 'Agent')} »"
             turn_instruction = (
                 f"Le dernier message vient de {trigger_author}. Réponds à son intervention sans "
-                "confondre son identité avec la tienne."
+                "confondre son identité avec la tienne. Tu es libre de poursuivre son idée, de la "
+                "questionner ou d'ouvrir une piste connexe utile. "
+                f"Initiative suggérée pour éviter une conversation monotone : "
+                f"{_initiative_for(trigger_event_id)}"
             )
         else:
             turn_instruction = (
@@ -380,6 +429,14 @@ def execute_room_turn(room_id: UUID, trigger_event_id: UUID) -> dict[str, str]:
             }
         if not room or room.status != RoomStatus.RUNNING:
             return {"status": "skipped", "roomId": str(room_id)}
+        latest_message_id = db.scalar(
+            select(Message.id)
+            .where(Message.room_id == room.id)
+            .order_by(Message.created_at.desc(), Message.id.desc())
+            .limit(1)
+        )
+        if latest_message_id != context.trigger_message_id:
+            return {"status": "superseded", "roomId": str(room_id)}
         started_at = room.started_at
         if started_at and started_at.tzinfo is None:
             started_at = started_at.replace(tzinfo=timezone.utc)

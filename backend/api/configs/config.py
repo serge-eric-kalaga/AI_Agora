@@ -34,7 +34,7 @@ class Settings(BaseSettings):
     log_level: str = "INFO"
     sse_poll_interval_seconds: float = 0.75
     sse_heartbeat_seconds: float = 15.0
-    max_agent_turns_per_trigger: int = Field(default=8, ge=1, le=10)
+    autonomous_turn_delay_seconds: int = Field(default=4, ge=1, le=300)
     room_turn_lock_seconds: int = Field(default=180, ge=30, le=600)
     allow_private_provider_endpoints: bool = False
 

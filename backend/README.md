@@ -92,15 +92,17 @@ Les commandes de création d'arène et de message demandent
 participant transmettent `expectedVersion`. Les événements se relisent par
 curseur et le flux SSE reprend avec `Last-Event-ID`.
 
-Le worker exécute `continue_room_turn` après chaque message humain d’une salle
-active. Une mention explicite sélectionne l’agent visé ; sinon l’agent actif
-ayant le moins contribué est favorisé. Les appels Ollama et OpenAI compatibles
-sont normalisés, idempotents et soumis aux limites de durée, messages et coût.
-Les tokens locaux et cloud sont comptabilisés séparément. Une chaîne contient
-au maximum `MAX_AGENT_TURNS_PER_TRIGGER` réponses (3 par défaut). Un échec final
-après retries devient un message système et un événement `agent.failed`. Un verrou
-Redis par salle, expirant après `ROOM_TURN_LOCK_SECONDS`, empêche deux workers de
-générer simultanément des réponses concurrentes dans une même conversation.
+Le worker exécute `continue_room_turn` après chaque message d’une salle active et
+entretient ensuite une conversation autonome. Une mention explicite sélectionne
+l’agent visé ; sinon la prise de parole varie tout en favorisant les participants
+les moins entendus et ceux qui ne viennent pas d’intervenir. Le délai entre deux
+tours est réglé par `AUTONOMOUS_TURN_DELAY_SECONDS`. Les appels Ollama et OpenAI
+compatibles sont normalisés, idempotents et soumis aux limites de durée et de coût.
+Les tokens locaux et cloud sont comptabilisés séparément. Un nouveau message humain
+remplace toute ancienne relance planifiée afin de conserver un seul fil actif. Un
+échec final après retries devient un message système et un événement `agent.failed`.
+Un verrou Redis par salle, expirant après `ROOM_TURN_LOCK_SECONDS`, empêche deux
+workers de générer simultanément des réponses concurrentes dans une même conversation.
 
 Pour joindre un Ollama déjà lancé sur la machine hôte depuis Docker, configurez
 le fournisseur avec `http://host.docker.internal:11434`. Sans Docker, utilisez

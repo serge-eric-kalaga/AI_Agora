@@ -8,6 +8,7 @@ from uuid import UUID
 
 from celery.exceptions import OperationalError
 from fastapi import APIRouter, Header, Query, Request, status
+from redis.exceptions import RedisError
 from sqlalchemy import and_, or_, select
 from sqlalchemy.orm import selectinload
 from sqlalchemy.sql import Select
@@ -352,7 +353,35 @@ def set_room_status(
         workspace_id=workspace_id,
         details={"version": room.version},
     )
+    pending_event_id: UUID | None = None
+    if target == RoomStatus.RUNNING:
+        recent_message_events = db.scalars(
+            select(ConversationEvent)
+            .where(
+                ConversationEvent.room_id == room.id,
+                ConversationEvent.event_type == "message.created",
+            )
+            .order_by(ConversationEvent.sequence.desc())
+            .limit(20)
+        ).all()
+        for candidate in recent_message_events:
+            completed = db.scalar(
+                select(ConversationEvent.id).where(
+                    ConversationEvent.room_id == room.id,
+                    ConversationEvent.idempotency_key == f"agent-turn:{candidate.id}",
+                )
+            )
+            if not completed:
+                pending_event_id = candidate.id
+                break
     db.commit()
+    if pending_event_id and get_settings().app_environment != "test":
+        from api.tasks import schedule_room_turn
+
+        try:
+            schedule_room_turn(str(room.id), str(pending_event_id), force=True)
+        except (OperationalError, RedisError):
+            logger.exception("Impossible de reprendre la conversation room_id=%s", room.id)
     return _room_read(_room(db, workspace_id, room.id))
 
 
@@ -509,11 +538,11 @@ def create_message(
     db.commit()
     db.refresh(message)
     if room.status == RoomStatus.RUNNING and get_settings().app_environment != "test":
-        from api.tasks import continue_room_turn
+        from api.tasks import schedule_room_turn
 
         try:
-            continue_room_turn.delay(str(room.id), str(event.id))
-        except OperationalError:
+            schedule_room_turn(str(room.id), str(event.id))
+        except (OperationalError, RedisError):
             # Le message humain reste valide même si la file est momentanément indisponible.
             logger.exception("Impossible de planifier le tour d'agent room_id=%s", room.id)
     return _message_read(db, message, current_user.id)
