@@ -2140,6 +2140,9 @@ td > svg {
   height: calc(100dvh - 66px);
   overflow: hidden;
 }
+.chat-layout.inspector-collapsed {
+  grid-template-columns: 205px minmax(0, 1fr);
+}
 .room-sidebar {
   background: #0c1221;
   border-right: 1px solid var(--border);
@@ -2231,6 +2234,7 @@ td > svg {
   border-top: 1px solid var(--border);
 }
 .conversation {
+  position: relative;
   display: flex;
   flex-direction: column;
   min-height: 0;
@@ -2338,6 +2342,14 @@ td > svg {
   align-items: flex-start;
   gap: 11px;
   padding: 17px 0;
+  border-radius: 9px;
+  transition:
+    background 180ms ease,
+    box-shadow 180ms ease;
+}
+.message-highlighted {
+  background: #a28aff12;
+  box-shadow: 0 0 0 1px #a28aff35;
 }
 .message > .avatar,
 .message > .human-avatar {
@@ -2436,20 +2448,58 @@ td > svg {
 .message-text table {
   font-size: 10px;
 }
-.message-content > blockquote {
+.message-reference {
   display: flex;
+  align-items: flex-start;
   gap: 6px;
+  width: 100%;
   border-left: 2px solid #a28aff5c;
   background: #a28aff06;
   color: #8b9bb6;
   font-size: 9px;
+  line-height: 1.55;
+  text-align: left;
   margin: 6px 0;
   padding: 7px 10px;
   max-height: 58px;
   overflow: hidden;
 }
-.message-content > blockquote > svg {
+.message-reference:hover,
+.message-reference:focus-visible {
+  background: #a28aff12;
+  color: #b5c2d9;
+}
+.message-reference > svg {
+  flex: 0 0 auto;
   margin-top: 2px;
+}
+.message-reference > span {
+  overflow: hidden;
+}
+.history-loader {
+  padding: 10px 0 2px;
+  color: var(--muted);
+  font-size: 9px;
+  text-align: center;
+}
+.scroll-to-bottom {
+  position: absolute;
+  right: 24px;
+  bottom: 116px;
+  z-index: 4;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 11px;
+  border: 1px solid #a28aff55;
+  border-radius: 999px;
+  background: #202a40;
+  color: #dbe4f6;
+  box-shadow: 0 8px 24px #0008;
+  font-size: 9px;
+}
+.scroll-to-bottom:hover {
+  background: #29344d;
 }
 .reaction-row {
   display: flex;
@@ -3028,6 +3078,9 @@ td > svg {
   .chat-layout {
     grid-template-columns: 235px minmax(0, 1fr) 290px;
   }
+  .chat-layout.inspector-collapsed {
+    grid-template-columns: 235px minmax(0, 1fr);
+  }
   .message-list {
     padding-left: 35px;
     padding-right: 35px;
@@ -3107,6 +3160,9 @@ td > svg {
   }
   .details-toggle {
     display: flex;
+  }
+  .inspector-toggle {
+    display: none;
   }
   .conversation-toolbar .demo-label {
     font-size: 9px;

@@ -115,6 +115,35 @@ def test_secure_provider_and_idempotent_arena_flow(
     )
     assert replayed_message.json()["id"] == message.json()["id"]
 
+    message_ids = [message.json()["id"]]
+    for index in range(4):
+        extra = client.post(
+            f"/api/v1/workspaces/{workspace_id}/rooms/{room['id']}/messages",
+            headers={**headers, "X-Idempotency-Key": f"message-page-{index:04d}"},
+            json={"content": f"Message de pagination {index + 1}"},
+        )
+        assert extra.status_code == 201, extra.text
+        message_ids.append(extra.json()["id"])
+
+    newest_page = client.get(
+        f"/api/v1/workspaces/{workspace_id}/rooms/{room['id']}/messages?limit=2",
+        headers=headers,
+    )
+    assert newest_page.status_code == 200, newest_page.text
+    assert [item["id"] for item in newest_page.json()["items"]] == message_ids[-2:]
+    assert newest_page.json()["nextCursor"]
+
+    older_page = client.get(
+        f"/api/v1/workspaces/{workspace_id}/rooms/{room['id']}/messages",
+        headers=headers,
+        params={"limit": 2, "before": newest_page.json()["nextCursor"]},
+    )
+    assert older_page.status_code == 200, older_page.text
+    assert [item["id"] for item in older_page.json()["items"]] == message_ids[-4:-2]
+    assert set(item["id"] for item in newest_page.json()["items"]).isdisjoint(
+        item["id"] for item in older_page.json()["items"]
+    )
+
     reaction = client.put(
         f"/api/v1/workspaces/{workspace_id}/rooms/{room['id']}/messages/{message.json()['id']}/reactions/🎯",
         headers=headers,

@@ -307,11 +307,24 @@ export async function readRoom(workspaceId: string, roomId: string) {
   const [room, messages] = await Promise.all([
     request(`/api/backend/workspaces/${workspaceId}/rooms/${roomId}`, roomReadSchema),
     request(
-      `/api/backend/workspaces/${workspaceId}/rooms/${roomId}/messages`,
+      `/api/backend/workspaces/${workspaceId}/rooms/${roomId}/messages?limit=50`,
       pageOf(messageReadSchema),
     ),
   ]);
-  return { room: mapRoom(room), messages: messages.items.map(mapMessage) };
+  return {
+    room: mapRoom(room),
+    messages: messages.items.map(mapMessage),
+    nextCursor: messages.nextCursor,
+  };
+}
+
+export async function readOlderRoomMessages(workspaceId: string, roomId: string, before: string) {
+  const query = new URLSearchParams({ limit: '50', before });
+  const page = await request(
+    `/api/backend/workspaces/${workspaceId}/rooms/${roomId}/messages?${query}`,
+    pageOf(messageReadSchema),
+  );
+  return { messages: page.items.map(mapMessage), nextCursor: page.nextCursor };
 }
 
 export async function persistRoomStatus(workspaceId: string, room: Room, status: Room['status']) {

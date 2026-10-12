@@ -34,6 +34,7 @@ import {
   persistAgent,
   persistProvider,
   readSession,
+  readOlderRoomMessages,
   readRoom,
   subscribeRoom as subscribeRoomEvents,
   verifyProvider,
@@ -61,7 +62,11 @@ type Store = {
   testProvider: (provider: Provider) => Promise<{ reachable: boolean; message: string }>;
   saveAgent: (draft: AgentDraft, existing?: Agent) => Promise<Agent>;
   createRoom: (draft: RoomDraft, running: boolean) => Promise<Room>;
-  loadRoom: (roomId: string) => Promise<void>;
+  loadRoom: (roomId: string) => Promise<{ nextCursor: string | null }>;
+  loadOlderMessages: (
+    roomId: string,
+    before: string,
+  ) => Promise<{ messages: Message[]; nextCursor: string | null }>;
   setRoomStatus: (room: Room, status: Room['status']) => Promise<Room>;
   setParticipant: (room: Room, agentId: string, present: boolean) => Promise<Room>;
   sendMessage: (roomId: string, content: string, replyToId?: string) => Promise<void>;
@@ -82,10 +87,20 @@ type StoreAction =
   | { agent: Agent }
   | { provider: Provider }
   | { room: Room }
-  | { roomData: { room: Room; messages: Message[] } }
+  | { roomData: { room: Room; messages: Message[]; nextCursor: string | null } }
+  | { olderMessages: Message[] }
   | { message: Message };
 
 const Context = createContext<Store | null>(null);
+
+function mergeMessages(current: Message[], incoming: Message[]) {
+  const messages = new Map(current.map((message) => [message.id, message]));
+  incoming.forEach((message) => messages.set(message.id, message));
+  return [...messages.values()].sort(
+    (left, right) =>
+      left.createdAt.localeCompare(right.createdAt) || left.id.localeCompare(right.id),
+  );
+}
 
 function reducer(state: AgoraState, action: StoreAction): AgoraState {
   if ('hydrate' in action) return action.hydrate;
@@ -118,12 +133,11 @@ function reducer(state: AgoraState, action: StoreAction): AgoraState {
             room.id === action.roomData.room.id ? action.roomData.room : room,
           )
         : [action.roomData.room, ...state.rooms],
-      messages: [
-        ...state.messages.filter((message) => message.roomId !== action.roomData.room.id),
-        ...action.roomData.messages,
-      ],
+      messages: mergeMessages(state.messages, action.roomData.messages),
     };
   }
+  if ('olderMessages' in action)
+    return { ...state, messages: mergeMessages(state.messages, action.olderMessages) };
   if ('room' in action) {
     const exists = state.rooms.some((room) => room.id === action.room.id);
     return {
@@ -302,9 +316,22 @@ export function AgoraProvider({ children }: { children: ReactNode }) {
 
   const loadRoom = useCallback(
     async (roomId: string) => {
-      if (demoMode) return;
+      if (demoMode) return { nextCursor: null };
       if (!activeWorkspaceId) throw new Error(t.session.noWorkspace);
-      send({ roomData: await readRoom(activeWorkspaceId, roomId) });
+      const roomData = await readRoom(activeWorkspaceId, roomId);
+      send({ roomData });
+      return { nextCursor: roomData.nextCursor };
+    },
+    [activeWorkspaceId],
+  );
+
+  const loadOlderMessages = useCallback(
+    async (roomId: string, before: string) => {
+      if (demoMode) return { messages: [], nextCursor: null };
+      if (!activeWorkspaceId) throw new Error(t.session.noWorkspace);
+      const page = await readOlderRoomMessages(activeWorkspaceId, roomId, before);
+      send({ olderMessages: page.messages });
+      return page;
     },
     [activeWorkspaceId],
   );
@@ -405,6 +432,7 @@ export function AgoraProvider({ children }: { children: ReactNode }) {
         saveAgent,
         createRoom,
         loadRoom,
+        loadOlderMessages,
         setRoomStatus,
         setParticipant,
         sendMessage,

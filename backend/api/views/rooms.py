@@ -8,7 +8,7 @@ from uuid import UUID
 
 from celery.exceptions import OperationalError
 from fastapi import APIRouter, Header, Query, Request, status
-from sqlalchemy import select
+from sqlalchemy import and_, or_, select
 from sqlalchemy.orm import selectinload
 from sqlalchemy.sql import Select
 from starlette.responses import StreamingResponse
@@ -343,20 +343,52 @@ def set_participant(
     return _room_read(_room(db, workspace_id, room.id))
 
 
-@router.get("/{room_id}/messages", response_model=Page[MessageRead], summary="Lister les messages")
+@router.get(
+    "/{room_id}/messages",
+    response_model=Page[MessageRead],
+    summary="Lister les messages",
+    description=(
+        "Retourne les messages les plus récents dans l'ordre chronologique. "
+        "Transmettre le curseur `before` pour charger progressivement les messages plus anciens."
+    ),
+)
 def list_messages(
     workspace_id: UUID,
     room_id: UUID,
     db: DbSession,
     current_user: CurrentUser,
-    limit: int = Query(default=100, ge=1, le=500),
+    before: UUID | None = Query(default=None, description="Identifiant du plus ancien message affiché."),
+    limit: int = Query(default=50, ge=1, le=100),
 ) -> Page[MessageRead]:
     require_workspace_member(db, workspace_id, current_user)
     _room(db, workspace_id, room_id)
-    messages = db.scalars(
-        select(Message).where(Message.room_id == room_id).order_by(Message.created_at).limit(limit)
+    query = select(Message).where(Message.room_id == room_id)
+    if before:
+        cursor_message = db.get(Message, before)
+        if not cursor_message or cursor_message.room_id != room_id:
+            raise DomainError(
+                "invalid_message_cursor",
+                "Le curseur de messages n'appartient pas à cette arène.",
+                422,
+            )
+        query = query.where(
+            or_(
+                Message.created_at < cursor_message.created_at,
+                and_(
+                    Message.created_at == cursor_message.created_at,
+                    Message.id < cursor_message.id,
+                ),
+            )
+        )
+    descending = db.scalars(
+        query.order_by(Message.created_at.desc(), Message.id.desc()).limit(limit + 1)
     ).all()
-    return Page(items=[_message_read(db, message, current_user.id) for message in messages])
+    has_more = len(descending) > limit
+    selected = descending[:limit]
+    return Page(
+        items=[_message_read(db, message, current_user.id) for message in reversed(selected)],
+        next_cursor=str(selected[-1].id) if has_more and selected else None,
+    )
 
 
 @router.post(

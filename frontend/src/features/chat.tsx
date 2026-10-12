@@ -19,8 +19,11 @@ import {
   Cpu,
   Sparkles,
   AtSign,
+  ArrowDown,
   ArrowLeft,
   Info,
+  PanelRightClose,
+  PanelRightOpen,
   UserRoundMinus,
   FileText,
 } from 'lucide-react';
@@ -56,6 +59,7 @@ function ChatRoom({ room }: { room: Room }) {
     dispatch,
     mode,
     loadRoom,
+    loadOlderMessages,
     setRoomStatus,
     setParticipant,
     sendMessage,
@@ -68,6 +72,10 @@ function ChatRoom({ room }: { room: Room }) {
     [mention, setMention] = useState<{ start: number; end: number; query: string } | null>(null),
     [activeMention, setActiveMention] = useState(0),
     [typingAgentIds, setTypingAgentIds] = useState<string[]>([]),
+    [loadingOlder, setLoadingOlder] = useState(false),
+    [showScrollToBottom, setShowScrollToBottom] = useState(false),
+    [highlightedMessageId, setHighlightedMessageId] = useState<string | null>(null),
+    [inspectorOpen, setInspectorOpen] = useState(true),
     [details, setDetails] = useState(false),
     [addOpen, setAddOpen] = useState(false),
     [agentId, setAgentId] = useState(''),
@@ -75,6 +83,9 @@ function ChatRoom({ room }: { room: Room }) {
   const end = useRef<HTMLDivElement>(null),
     messageList = useRef<HTMLDivElement>(null),
     followsLatest = useRef(true),
+    olderCursor = useRef<string | null>(null),
+    loadingOlderRef = useRef(false),
+    highlightTimer = useRef<ReturnType<typeof setTimeout> | null>(null),
     composer = useRef<HTMLTextAreaElement>(null);
   const messages = state.messages.filter((m) => m.roomId === room.id);
   const participants = state.agents.filter((a) => room.agentIds.includes(a.id));
@@ -105,15 +116,74 @@ function ChatRoom({ room }: { room: Room }) {
           : current.filter((agentId) => agentId !== id),
       );
     });
-    void loadRoom(room.id).catch((cause) =>
-      notify(cause instanceof Error ? cause.message : t.shell.storageError),
-    );
+    void loadRoom(room.id)
+      .then((page) => {
+        olderCursor.current = page.nextCursor;
+      })
+      .catch((cause) => notify(cause instanceof Error ? cause.message : t.shell.storageError));
     return unsubscribe;
   }, [loadRoom, mode, notify, room.id, subscribeRoom]);
+  useEffect(
+    () => () => {
+      if (highlightTimer.current) clearTimeout(highlightTimer.current);
+    },
+    [],
+  );
   useEffect(() => {
     if (followsLatest.current)
       end.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
   }, [messages.length]);
+  async function fetchOlderMessages(preservePosition: boolean) {
+    const cursor = olderCursor.current;
+    if (!cursor || loadingOlderRef.current) return null;
+    const list = messageList.current;
+    const previousHeight = list?.scrollHeight ?? 0;
+    loadingOlderRef.current = true;
+    setLoadingOlder(true);
+    try {
+      const page = await loadOlderMessages(room.id, cursor);
+      olderCursor.current = page.nextCursor;
+      if (preservePosition && list) {
+        requestAnimationFrame(() =>
+          requestAnimationFrame(() => {
+            list.scrollTop += list.scrollHeight - previousHeight;
+          }),
+        );
+      }
+      return page;
+    } catch (cause) {
+      notify(cause instanceof Error ? cause.message : t.shell.storageError);
+      return null;
+    } finally {
+      loadingOlderRef.current = false;
+      setLoadingOlder(false);
+    }
+  }
+  async function jumpToMessage(messageId: string) {
+    let target = document.getElementById(`message-${messageId}`);
+    let attempts = 0;
+    while (!target && olderCursor.current && attempts < 20) {
+      const page = await fetchOlderMessages(false);
+      if (!page) break;
+      attempts += 1;
+      if (page.messages.some((message) => message.id === messageId)) {
+        await new Promise<void>((resolve) =>
+          requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
+        );
+        target = document.getElementById(`message-${messageId}`);
+      }
+    }
+    if (!target) return;
+    target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    setHighlightedMessageId(messageId);
+    if (highlightTimer.current) clearTimeout(highlightTimer.current);
+    highlightTimer.current = setTimeout(() => setHighlightedMessageId(null), 1800);
+  }
+  function scrollToBottom() {
+    followsLatest.current = true;
+    setShowScrollToBottom(false);
+    end.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  }
   async function send(e?: FormEvent) {
     e?.preventDefault();
     const content = text.trim();
@@ -269,7 +339,7 @@ function ChatRoom({ room }: { room: Room }) {
     </>
   );
   return (
-    <div className="chat-layout">
+    <div className={`chat-layout ${inspectorOpen ? '' : 'inspector-collapsed'}`}>
       <aside className="room-sidebar">
         <div className="room-sidebar-heading">
           <h2>
@@ -318,6 +388,15 @@ function ChatRoom({ room }: { room: Room }) {
           >
             <Info size={20} />
           </button>
+          <button
+            className="icon-button inspector-toggle"
+            aria-label={inspectorOpen ? t.chat.hideInspector : t.chat.showInspector}
+            title={inspectorOpen ? t.chat.hideInspector : t.chat.showInspector}
+            aria-expanded={inspectorOpen}
+            onClick={() => setInspectorOpen((open) => !open)}
+          >
+            {inspectorOpen ? <PanelRightClose size={19} /> : <PanelRightOpen size={19} />}
+          </button>
         </header>
         <div className="conversation-toolbar">
           <span className="demo-label">
@@ -362,10 +441,14 @@ function ChatRoom({ room }: { room: Room }) {
           ref={messageList}
           onScroll={() => {
             const list = messageList.current;
-            if (list)
-              followsLatest.current = list.scrollHeight - list.scrollTop - list.clientHeight < 120;
+            if (!list) return;
+            const nearBottom = list.scrollHeight - list.scrollTop - list.clientHeight < 120;
+            followsLatest.current = nearBottom;
+            setShowScrollToBottom(!nearBottom);
+            if (!nearBottom && list.scrollTop < 160) void fetchOlderMessages(true);
           }}
         >
+          {loadingOlder && <div className="history-loader">{t.chat.loadingHistory}</div>}
           <div className="conversation-start">
             <span className="feature-icon tone-violet">
               <MessagesSquare size={24} />
@@ -384,7 +467,7 @@ function ChatRoom({ room }: { room: Room }) {
           {messages.map((message) => {
             if (message.kind === 'system')
               return (
-                <div className="system-message" key={message.id}>
+                <div className="system-message" id={`message-${message.id}`} key={message.id}>
                   <Info size={13} />
                   <span>{message.text}</span>
                 </div>
@@ -393,7 +476,8 @@ function ChatRoom({ room }: { room: Room }) {
             const reply = messages.find((m) => m.id === message.replyTo);
             return (
               <article
-                className={`message ${!message.agentId ? 'human-message' : ''}`}
+                id={`message-${message.id}`}
+                className={`message ${!message.agentId ? 'human-message' : ''} ${highlightedMessageId === message.id ? 'message-highlighted' : ''}`}
                 key={message.id}
               >
                 {agent ? <Avatar agent={agent} /> : <span className="human-avatar">EX</span>}
@@ -412,11 +496,16 @@ function ChatRoom({ room }: { room: Room }) {
                       <Reply size={14} />
                     </button>
                   </div>
-                  {reply && (
-                    <blockquote>
+                  {message.replyTo && (
+                    <button
+                      type="button"
+                      className="message-reference"
+                      aria-label={t.chat.goToReply}
+                      onClick={() => void jumpToMessage(message.replyTo!)}
+                    >
                       <Reply size={12} />
-                      {reply.text.slice(0, 160)}
-                    </blockquote>
+                      <span>{reply?.text.slice(0, 160) ?? t.chat.quotedMessage}</span>
+                    </button>
                   )}
                   <div className="message-text">
                     <Markdown
@@ -463,6 +552,12 @@ function ChatRoom({ room }: { room: Room }) {
           })}
           <div ref={end} />
         </div>
+        {showScrollToBottom && (
+          <button className="scroll-to-bottom" onClick={scrollToBottom}>
+            <ArrowDown size={16} />
+            {t.chat.scrollToBottom}
+          </button>
+        )}
         <div className="composer-area">
           {typingAgentIds.length > 0 && (
             <div className="typing-indicator" role="status" aria-live="polite">
@@ -624,7 +719,7 @@ function ChatRoom({ room }: { room: Room }) {
           </div>
         </div>
       </section>
-      <aside className="room-inspector">{info}</aside>
+      {inspectorOpen && <aside className="room-inspector">{info}</aside>}
       <Modal open={details} onClose={() => setDetails(false)} title={t.chat.overview}>
         <div className="mobile-inspector">{info}</div>
       </Modal>
