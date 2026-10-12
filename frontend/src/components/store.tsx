@@ -36,6 +36,7 @@ import {
   readSession,
   readRoom,
   subscribeRoom as subscribeRoomEvents,
+  verifyProvider,
 } from '@/data/http-api';
 import { seed } from '@/data/seed';
 import { t } from '@/i18n';
@@ -57,6 +58,7 @@ type Store = {
   logout: () => Promise<void>;
   selectWorkspace: (id: string) => Promise<void>;
   saveProvider: (provider: Provider, apiKey?: string) => Promise<Provider>;
+  testProvider: (provider: Provider) => Promise<{ reachable: boolean; message: string }>;
   saveAgent: (draft: AgentDraft, existing?: Agent) => Promise<Agent>;
   createRoom: (draft: RoomDraft, running: boolean) => Promise<Room>;
   loadRoom: (roomId: string) => Promise<void>;
@@ -249,6 +251,16 @@ export function AgoraProvider({ children }: { children: ReactNode }) {
     return saved;
   }
 
+  async function testProvider(provider: Provider) {
+    if (demoMode) return { reachable: true, message: t.providers.testSuccessDemo };
+    if (!activeWorkspaceId) throw new Error(t.session.noWorkspace);
+    const result = await verifyProvider(activeWorkspaceId, provider.id);
+    if (result.reachable && result.modelsDiscovered.length) {
+      send({ provider: { ...provider, models: result.modelsDiscovered } });
+    }
+    return result;
+  }
+
   async function saveAgent(draft: AgentDraft, existing?: Agent) {
     if (demoMode) {
       const saved: Agent = { ...draft, id: existing?.id ?? crypto.randomUUID(), version: 1 };
@@ -371,6 +383,7 @@ export function AgoraProvider({ children }: { children: ReactNode }) {
         logout,
         selectWorkspace,
         saveProvider,
+        testProvider,
         saveAgent,
         createRoom,
         loadRoom,

@@ -1,10 +1,12 @@
 """Cycle de vie des arènes, messages, réactions et flux d'événements."""
 
 import asyncio
+import logging
 from collections import Counter
 from datetime import datetime, timezone
 from uuid import UUID
 
+from celery.exceptions import OperationalError
 from fastapi import APIRouter, Header, Query, Request, status
 from sqlalchemy import func, select
 from sqlalchemy.orm import selectinload
@@ -47,6 +49,7 @@ from api.services.audit import record_audit
 from api.services.events import append_room_event
 
 router = APIRouter(prefix="/workspaces/{workspace_id}/rooms", tags=["Arènes"])
+logger = logging.getLogger(__name__)
 ALLOWED_REACTIONS = {"👍", "👎", "❤️", "🎯", "💡", "🤔"}
 
 
@@ -382,7 +385,7 @@ def create_message(
     )
     db.add(message)
     db.flush()
-    append_room_event(
+    event = append_room_event(
         db,
         room.id,
         "message.created",
@@ -392,6 +395,14 @@ def create_message(
     )
     db.commit()
     db.refresh(message)
+    if room.status == RoomStatus.RUNNING and get_settings().app_environment != "test":
+        from api.tasks import continue_room_turn
+
+        try:
+            continue_room_turn.delay(str(room.id), str(event.id))
+        except OperationalError:
+            # Le message humain reste valide même si la file est momentanément indisponible.
+            logger.exception("Impossible de planifier le tour d'agent room_id=%s", room.id)
     return _message_read(db, message, current_user.id)
 
 

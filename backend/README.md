@@ -86,6 +86,12 @@ Les commandes de création d'arène et de message demandent
 participant transmettent `expectedVersion`. Les événements se relisent par
 curseur et le flux SSE reprend avec `Last-Event-ID`.
 
-Le worker expose aujourd'hui le contrat durable `continue_room_turn`. La
-stratégie de sélection d'agent, les appels réels aux modèles, le calcul des
-coûts et l'annulation coopérative seront implémentés dans la prochaine tranche.
+Le worker exécute `continue_room_turn` après chaque message humain d’une salle
+active. Une mention explicite sélectionne l’agent visé ; sinon l’agent actif
+ayant le moins contribué est favorisé. Les appels Ollama et OpenAI compatibles
+sont normalisés, idempotents et soumis aux limites de durée, messages et coût.
+Les tokens locaux et cloud sont comptabilisés séparément.
+
+Pour joindre un Ollama déjà lancé sur la machine hôte depuis Docker, configurez
+le fournisseur avec `http://host.docker.internal:11434`. Sans Docker, utilisez
+`http://127.0.0.1:11434`. Le bouton de diagnostic découvre les modèles exposés.

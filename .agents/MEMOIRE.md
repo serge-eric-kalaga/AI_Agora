@@ -7,6 +7,7 @@
 - Session web via cookie HttpOnly géré par Next.js ; le JWT n’est pas exposé au JavaScript.
 - Les espaces, fournisseurs, agents, salles, messages, réactions et statuts utilisent l’API réelle.
 - Les événements de salle sont suivis par SSE avec reprise du dernier curseur en session.
+- Le worker produit une réponse réelle via Ollama ou une API compatible OpenAI après un message humain.
 - Les clés fournisseurs sont chiffrées par le backend et ne sont jamais restituées.
 
 ## État vérifié au 12/10/2026
@@ -17,9 +18,10 @@
 - La création d’agent est vérifiée de bout en bout après correction de l’origine derrière Docker : l’agent Ariane apparaît dans l’interface et dans `agent_definitions` avec son fournisseur.
 - Le parcours salle est vérifié de bout en bout : 2 participants, création et reprise, message, réaction et rafraîchissement SSE persistés dans PostgreSQL.
 - Vérifications frontend valides : formatage, TypeScript, ESLint, build Next.js et 12 tests unitaires.
+- Ollama hôte est joignable depuis Docker ; `qwen3.5:4b` a répondu avec comptage des tokens.
 
 ## Prochain objectif
 
-1. Exécuter les tours d’agents via le worker et les fournisseurs configurés.
-2. Ajouter des tests E2E automatisés pour le parcours API et la reprise SSE.
-3. Compléter les métriques de consommation et de coût remontées par le backend.
+1. Valider le parcours complet message humain vers réponse Ollama dans l’interface.
+2. Ajouter les diagnostics d’échec du worker et les tests E2E automatisés.
+3. Étendre l’orchestration aux silences, réactions et chaînes multi-agents bornées.

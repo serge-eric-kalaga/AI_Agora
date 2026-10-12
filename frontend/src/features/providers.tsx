@@ -17,11 +17,12 @@ import { Badge, Field, Modal, PageHeading, SectionHeading } from '@/components/u
 import { t } from '@/i18n';
 import type { Provider } from '@/domain/models';
 export function Providers() {
-  const { state, mode, saveProvider, notify } = useAgora();
+  const { state, mode, saveProvider, testProvider, notify } = useAgora();
   const [editing, setEditing] = useState<Provider | null>(null),
     [apiKey, setApiKey] = useState(''),
     [error, setError] = useState(''),
-    [saving, setSaving] = useState(false);
+    [saving, setSaving] = useState(false),
+    [testingId, setTestingId] = useState('');
   const blankProvider: Provider = {
     id: '',
     name: '',
@@ -58,6 +59,17 @@ export function Providers() {
       setError(reason instanceof Error ? reason.message : t.session.genericError);
     } finally {
       setSaving(false);
+    }
+  }
+  async function test(provider: Provider) {
+    setTestingId(provider.id);
+    try {
+      const result = await testProvider(provider);
+      notify(result.message);
+    } catch (reason) {
+      notify(reason instanceof Error ? reason.message : t.session.genericError);
+    } finally {
+      setTestingId('');
     }
   }
   return (
@@ -182,6 +194,14 @@ export function Providers() {
                   >
                     {p.connected ? t.providers.disconnect : t.providers.connect}
                   </button>
+                  <button
+                    className="button secondary"
+                    disabled={testingId === p.id}
+                    onClick={() => void test(p)}
+                  >
+                    <Cable size={15} />
+                    {testingId === p.id ? t.providers.testing : t.providers.test}
+                  </button>
                 </div>
               </div>
               <div className="local-models">
@@ -192,7 +212,7 @@ export function Providers() {
                       {model}
                       <small>{t.common.local}</small>
                     </span>
-                    <Badge tone="green">{t.common.simulated}</Badge>
+                    <Badge tone="green">{t.common.local}</Badge>
                   </div>
                 ))}
               </div>
@@ -316,10 +336,14 @@ export function Providers() {
                 onChange={(e) => setEditing({ ...editing, connected: e.target.checked })}
               />
             </label>
-            {mode === 'demo' && (
-              <button className="button secondary" onClick={() => notify(t.providers.testSuccess)}>
+            {editing.id && (
+              <button
+                className="button secondary"
+                disabled={testingId === editing.id}
+                onClick={() => void test(editing)}
+              >
                 <Check size={16} />
-                {t.providers.test}
+                {testingId === editing.id ? t.providers.testing : t.providers.test}
               </button>
             )}
             {error && (

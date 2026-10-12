@@ -27,7 +27,7 @@ flowchart LR
 | `api/database` | Modèle SQLAlchemy et sessions courtes |
 | `api/schemas` | Contrats publics camelCase et validation métier |
 | `api/views` | Autorisation, orchestration de transaction et Swagger |
-| `api/services` | Audit, événements et connecteurs fournisseurs |
+| `api/services` | Audit, événements, connecteurs fournisseurs et orchestration |
 | `api/security.py` | bcrypt, JWT et chiffrement Fernet |
 | `api/celery_app.py` | File de tâches durables |
 | `alembic` | Migrations versionnées |
@@ -45,15 +45,20 @@ flowchart LR
 7. Les clés de fournisseurs sont chiffrées, absentes des réponses et des logs.
 8. Les mises à jour concurrentes utilisent une version attendue et répondent
    `409 Conflict` en cas de donnée périmée.
+9. Un événement humain ne produit qu’un message d’agent par clé idempotente.
+10. Les tokens Ollama restent séparés des tokens et coûts cloud.
 
-## Suite de l'orchestration IA
+## Orchestration IA
 
-La prochaine tranche branchera le worker sur une interface commune de modèle :
-entrée structurée, streaming, usage en tokens, coût, délai, erreurs normalisées
-et annulation. Chaque tour réservera d'abord un événement, vérifiera de nouveau
-le budget, exécutera le fournisseur hors transaction longue, puis persistera le
-message et l'usage dans une transaction idempotente. Ce découpage permet de
-reprendre une tâche après panne sans doubler une prise de parole.
+Le worker utilise une interface commune pour Ollama et les API compatibles
+OpenAI. Il vérifie les limites avant l’appel, favorise une mention explicite ou
+l’agent ayant le moins contribué, exécute le fournisseur hors transaction
+longue, puis revérifie l’état de la salle avant de persister message, usage et
+événement. La clé dérivée de l’événement déclencheur empêche les doublons lors
+d’une reprise Celery.
+
+La suite ajoutera les décisions de silence ou réaction, les diagnostics finaux
+après épuisement des retries, puis les chaînes multi-agents bornées.
 
 Les WebSockets pourront être ajoutés si des commandes bidirectionnelles à faible
 latence deviennent nécessaires. Pour le MVP, SSE suffit au flux serveur vers le

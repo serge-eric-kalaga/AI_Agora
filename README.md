@@ -30,7 +30,7 @@ Swagger est disponible sur [http://localhost:8000/docs](http://localhost:8000/do
 - Éditeur de personnalité : profils locaux, quatre traits, instructions, modèle, température, tokens et permissions d’outils.
 - Création de salle en six étapes : objectif, agents, règles, temporalité, visibilité, limites et lancement.
 - Chat Markdown : messages humains, mentions textuelles, réponses citées, réactions, participants modifiables, pause/reprise/arrêt, synthèse locale et export JSON.
-- Fournisseurs cloud et Ollama : catalogue d’exemples, connexions simulées et configuration d’endpoint non sensible.
+- Fournisseurs cloud et Ollama : configuration sécurisée, diagnostic réel et découverte des modèles.
 - Statistiques locales, journal d’activité et export complet du laboratoire.
 - Français, dictionnaire centralisé et routes `/fr` pour préparer la localisation.
 
@@ -41,15 +41,14 @@ Swagger est disponible sur [http://localhost:8000/docs](http://localhost:8000/do
 - Agents versionnés et arènes à transitions contrôlées.
 - Messages et réactions idempotents, budgets et événements ordonnés.
 - REST documenté, SSE reprenable, audit, métriques, migrations et worker Celery.
+- Tours d’agents asynchrones via Ollama ou API compatible OpenAI, avec idempotence et comptage des tokens.
 - Stack Docker orientée AI Agora : PostgreSQL, Redis, backend, worker, frontend et profil Ollama.
 
-## Périmètre de cette version
+## Ollama sur la machine hôte
 
-Le frontend continue à fonctionner avec ses données de démonstration dans le navigateur et n'est pas encore branché sur l'API. Aucun appel IA ni aucune dépense ne sont déclenchés. Le backend prépare l'orchestration durable, mais la stratégie de tours et les appels aux modèles seront traités dans la prochaine tranche.
+Dans l’interface, créez un fournisseur local avec l’adresse `http://host.docker.internal:11434`, puis utilisez **Tester la connexion** pour découvrir les modèles. Le worker privilégie le modèle choisi sur chaque agent et comptabilise ses tokens séparément des coûts cloud. Ne publiez pas le port Ollama sur Internet.
 
-Les données sont sauvegardées dans le `localStorage` de l’origine utilisée. `localhost` et `127.0.0.1` ont des sauvegardes distinctes. L’onglet courant constitue le périmètre d’édition ; la synchronisation simultanée entre onglets et entre appareils n’est pas implémentée. Après rechargement, les salles qui tournaient sont remises en pause. Les modes arrière-plan et permanent sont configurables, mais l’exécution durable attend le backend.
-
-Les invitations, les appels IA, les outils externes, l'intégration du frontend, les exports PDF et les fils autonomes restent à réaliser. Les mentions ne déclenchent pas encore de routage intelligent.
+Le mode API est actif par défaut. Le mode de démonstration local reste disponible avec `NEXT_PUBLIC_DATA_MODE=demo`. Les modes arrière-plan et permanent, les invitations, les outils externes, les exports PDF et les chaînes autonomes de plusieurs interventions seront complétés progressivement.
 
 ## Repères
 

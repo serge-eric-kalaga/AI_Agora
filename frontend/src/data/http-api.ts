@@ -34,6 +34,12 @@ const providerReadSchema = z.object({
   isEnabled: z.boolean(),
   hasApiKey: z.boolean(),
 });
+const providerTestSchema = z.object({
+  reachable: z.boolean(),
+  message: z.string(),
+  modelsDiscovered: z.array(z.string()),
+  testedAt: z.string(),
+});
 const agentReadSchema = z.object({
   id: z.string(),
   providerId: z.string(),
@@ -404,6 +410,14 @@ export async function persistProvider(
     { method: creating ? 'POST' : 'PATCH', body: JSON.stringify(body) },
   );
   return { ...mapProvider(result), color: provider.color };
+}
+
+export async function verifyProvider(workspaceId: string, providerId: string) {
+  return request(
+    `/api/backend/workspaces/${workspaceId}/providers/${providerId}/test`,
+    providerTestSchema,
+    { method: 'POST' },
+  );
 }
 
 export async function persistAgent(

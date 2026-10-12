@@ -26,13 +26,13 @@ src/features/         Écrans : dashboard, agents, salle, chat, fournisseurs, st
 src/components/       Navigation, composants partagés et contexte d’état
 src/domain/models.ts  Entités et schémas Zod de sauvegarde
 src/domain/engine.ts  Commandes typées et transitions pures de la simulation
-src/domain/api.ts     Contrat d’intégration proposé pour FastAPI/SSE
+src/data/http-api.ts  Client FastAPI, validation Zod et souscription SSE
 src/data/seed.ts       Jeux de données français de démonstration
 src/data/repository.ts Adaptateur local et export JSON
 src/i18n/             Dictionnaire français et formatages Intl
 ```
 
-Les écrans n’accèdent pas directement au stockage. `AgoraProvider` charge le dépôt, applique les commandes métier et persiste les mises à jour. Les sauvegardes sont versionnées (`ai-agora:workspace:v1`) et validées avec Zod. En cas de données invalides, une copie de récupération est tentée avant de revenir aux données initiales ; une alerte est affichée. En cas de stockage indisponible, l’interface reste utilisable en mémoire et prévient l’utilisateur.
+Les écrans passent par `AgoraProvider`. En mode normal, Next.js relaie les commandes vers FastAPI avec une session HttpOnly et reçoit les mises à jour des salles par SSE. Le mode `NEXT_PUBLIC_DATA_MODE=demo` conserve le dépôt local versionné pour les démonstrations sans backend.
 
 ### Simulation
 
@@ -42,17 +42,9 @@ Chaque réponse cloud est comptée à **0,02 € et 400 tokens fictifs**. Une r�
 
 Les outils effectifs affichés sont l’intersection salle/agent. La plateforme et l’espace seront des niveaux supplémentaires d’autorisation côté backend. Les réactions de l’humain sont activables/désactivables sans effacer celles des agents. Le retrait d’un participant conserve les messages existants et ajoute un événement.
 
-### Préparation FastAPI
+### Intégration FastAPI
 
-`src/domain/api.ts` formalise le contrat envisagé, sans implémenter un faux client réseau. Pour raccorder le backend :
-
-1. Introduire un adaptateur HTTP qui récupère les entités et exécute les commandes. L’API devient l’autorité sur les permissions, limites, versions et coûts.
-2. Remplacer la boucle de simulation par une souscription SSE ou WebSocket versionnée, avec curseur, reconnexion et déduplication.
-3. Conserver les composants de présentation et remplacer les données de démonstration dans le contexte.
-4. Faire gérer les secrets, l’authentification, le RBAC et les connecteurs par le serveur. Ne pas ajouter de clés API au `localStorage` ni à des variables `NEXT_PUBLIC_*`.
-5. Séparer les versions/instances d’agents, les invocations facturées et les événements serveur selon le cahier des charges complet.
-
-La sauvegarde actuelle de l’état complet est un adaptateur de démo, pas une proposition d’API de persistance production.
+L’API est l’autorité sur les permissions, limites, versions, secrets et coûts. Les espaces, fournisseurs, agents, salles, participants, messages, réactions et statuts sont persistés côté serveur. Le curseur SSE est conservé en session pour reprendre le flux sans doubler les événements.
 
 ### Localisation
 
@@ -62,8 +54,7 @@ Pour ajouter une langue : ajouter son dictionnaire typé, étendre `locales`, s�
 
 ## Limites connues
 
-- Prototype frontend, sans garantie de sécurité multi-utilisateur ni synchronisation réseau.
-- Suggestions de personnalité et synthèse locales, sans génération IA.
-- Pas de découverte de modèles réelle, streaming, exécution d’outils, téléchargement de pièces jointes ni conversations en tâche de fond.
-- Le catalogue et ses noms de modèles sont illustratifs.
+- Suggestions de personnalité et synthèse encore locales.
+- Pas encore de streaming token par token, d’outils externes, de pièces jointes ni de chaînes autonomes multi-agents.
+- Les modes arrière-plan et permanent sont configurables mais leur planification durable reste à compléter.
 - L’audit npm complet signale cinq entrées de vulnérabilité élevées dans la chaîne **de développement** `eslint-config-next → fast-glob → micromatch → braces`. Au 11/10/2026, la correction automatique proposée implique un retour majeur à Next ESLint 14 et n’a pas été appliquée. L’audit limité aux dépendances de production ne signale aucune vulnérabilité. Éviter de traiter des motifs glob non fiables avec cette chaîne ; réévaluer lors d’une mise à jour upstream.

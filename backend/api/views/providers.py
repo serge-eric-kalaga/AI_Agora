@@ -153,7 +153,11 @@ async def check_provider(
     current_user: CurrentUser,
 ) -> ProviderTestResult:
     require_workspace_editor(db, workspace_id, current_user)
-    reachable, message, models, tested_at = await test_provider(_provider(db, workspace_id, provider_id))
+    provider = _provider(db, workspace_id, provider_id)
+    reachable, message, models, tested_at = await test_provider(provider)
+    if reachable and models:
+        provider.models = models
+        db.commit()
     return ProviderTestResult(
         reachable=reachable,
         message=message,
