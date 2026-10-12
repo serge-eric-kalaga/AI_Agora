@@ -524,11 +524,26 @@ function ChatRoom({ room }: { room: Room }) {
                   <div className="reaction-row">
                     {emojis.map((emoji) => {
                       const count = message.reactions[emoji]?.length ?? 0;
+                      const actors = message.reactionActors?.[emoji] ?? [];
+                      const hiddenActors = Math.max(0, count - actors.length);
+                      const actorNames = actors.map((actor) =>
+                        actor.isMe ? t.common.you : actor.name,
+                      );
+                      const tooltip = [
+                        ...actorNames,
+                        ...(hiddenActors
+                          ? [
+                              hiddenActors === 1
+                                ? t.chat.oneMoreReaction
+                                : t.chat.moreReactions.replace('{count}', String(hiddenActors)),
+                            ]
+                          : []),
+                      ].join(', ');
                       return (
                         <button
                           key={emoji}
                           className={`reaction ${message.reactions[emoji]?.includes('human') ? 'selected' : ''} ${count ? 'has-count' : ''}`}
-                          aria-label={`${t.chat.react} ${emoji}`}
+                          aria-label={`${t.chat.react} ${emoji}${tooltip ? ` : ${tooltip}` : ''}`}
                           aria-pressed={message.reactions[emoji]?.includes('human') ?? false}
                           onClick={() =>
                             report(
@@ -541,7 +556,12 @@ function ChatRoom({ room }: { room: Room }) {
                           }
                         >
                           {emoji}
-                          {count > 0 && <span>{count}</span>}
+                          {count > 0 && <span className="reaction-count">{count}</span>}
+                          {tooltip && (
+                            <span className="reaction-tooltip" role="tooltip">
+                              {tooltip}
+                            </span>
+                          )}
                         </button>
                       );
                     })}

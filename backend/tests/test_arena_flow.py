@@ -6,7 +6,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy import select
 
 from api.database import SessionLocal
-from api.database.models import ProviderConnection
+from api.database.models import Message, MessageKind, ProviderConnection
 
 
 def _create_agent(
@@ -151,8 +151,57 @@ def test_secure_provider_and_idempotent_arena_flow(
     )
     assert reaction.status_code == 200, reaction.text
     assert reaction.json()["reactions"] == [
-        {"emoji": "🎯", "count": 1, "reactedByMe": True, "agentIds": []}
+        {
+            "emoji": "🎯",
+            "count": 1,
+            "reactedByMe": True,
+            "agentIds": [],
+            "actors": [
+                {
+                    "id": account["user"]["id"],
+                    "displayName": "architecte",
+                    "kind": "user",
+                    "isMe": True,
+                }
+            ],
+        }
     ]
+
+    with SessionLocal() as session:
+        session.add(
+            Message(
+                room_id=UUID(room["id"]),
+                author_agent_id=UUID(first["id"]),
+                kind=MessageKind.MESSAGE,
+                content="Une contribution persistée de Socrate.",
+                idempotency_key="analytics-agent-message",
+            )
+        )
+        session.commit()
+
+    analytics = client.get(
+        f"/api/v1/workspaces/{workspace_id}/analytics",
+        headers=headers,
+    )
+    assert analytics.status_code == 200, analytics.text
+    analytics_payload = analytics.json()
+    assert {
+        key: analytics_payload[key]
+        for key in (
+            "totalMessages",
+            "humanMessages",
+            "agentMessages",
+            "totalReactions",
+            "activeAgents",
+        )
+    } == {
+        "totalMessages": 6,
+        "humanMessages": 5,
+        "agentMessages": 1,
+        "totalReactions": 1,
+        "activeAgents": 2,
+    }
+    assert analytics_payload["contributions"] == [{"agentId": first["id"], "messageCount": 1}]
 
     events = client.get(
         f"/api/v1/workspaces/{workspace_id}/rooms/{room['id']}/events",

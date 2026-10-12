@@ -89,11 +89,22 @@ class MessageCreate(APIModel):
     reply_to_id: UUID | None = None
 
 
+class ReactionActorRead(APIModel):
+    id: UUID
+    display_name: str
+    kind: Literal["user", "agent"]
+    is_me: bool = False
+
+
 class ReactionRead(APIModel):
     emoji: str
     count: int
     reacted_by_me: bool
     agent_ids: list[UUID] = Field(default_factory=list)
+    actors: list[ReactionActorRead] = Field(
+        default_factory=list,
+        description="Au plus trois personnes ayant réagi, pour l'infobulle du client.",
+    )
 
 
 class MessageRead(APIModel):

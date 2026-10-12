@@ -92,10 +92,45 @@ const messageReadSchema = z.object({
       count: z.number().int().nonnegative(),
       reactedByMe: z.boolean(),
       agentIds: z.array(z.string()).default([]),
+      actors: z
+        .array(
+          z.object({
+            id: z.string(),
+            displayName: z.string(),
+            kind: z.enum(['user', 'agent']),
+            isMe: z.boolean(),
+          }),
+        )
+        .default([]),
     }),
   ),
   createdAt: z.string(),
 });
+const workspaceAnalyticsSchema = z.object({
+  totalMessages: z.number().int().nonnegative(),
+  humanMessages: z.number().int().nonnegative(),
+  agentMessages: z.number().int().nonnegative(),
+  totalReactions: z.number().int().nonnegative(),
+  cloudCost: z.coerce.number().nonnegative(),
+  cloudTokens: z.number().int().nonnegative(),
+  localTokens: z.number().int().nonnegative(),
+  activeAgents: z.number().int().nonnegative(),
+  contributions: z.array(
+    z.object({ agentId: z.string(), messageCount: z.number().int().nonnegative() }),
+  ),
+  recentEvents: z.array(
+    z.object({
+      id: z.string(),
+      roomId: z.string(),
+      roomName: z.string(),
+      eventType: z.string(),
+      actorAgentId: z.string().nullable(),
+      occurredAt: z.string(),
+    }),
+  ),
+});
+
+export type WorkspaceAnalytics = z.infer<typeof workspaceAnalyticsSchema>;
 
 const palette = ['violet', 'cyan', 'amber', 'blue', 'pink', 'green'];
 
@@ -217,6 +252,17 @@ function mapMessage(value: z.infer<typeof messageReadSchema>): Message {
       return [reaction.emoji, actors];
     }),
   );
+  const reactionActors = Object.fromEntries(
+    value.reactions.map((reaction) => [
+      reaction.emoji,
+      reaction.actors.map((actor) => ({
+        id: actor.id,
+        name: actor.displayName,
+        kind: actor.kind,
+        isMe: actor.isMe,
+      })),
+    ]),
+  );
   return {
     id: value.id,
     roomId: value.roomId,
@@ -225,6 +271,7 @@ function mapMessage(value: z.infer<typeof messageReadSchema>): Message {
     text: value.content,
     createdAt: value.createdAt,
     reactions,
+    reactionActors,
     ...(value.replyToId ? { replyTo: value.replyToId } : {}),
   };
 }
@@ -269,6 +316,10 @@ export async function listWorkspaceData(workspaceId: string) {
     agents: agents.items.map(mapAgent),
     rooms: rooms.items.map(mapRoom),
   };
+}
+
+export async function readWorkspaceAnalytics(workspaceId: string) {
+  return request(`/api/backend/workspaces/${workspaceId}/analytics`, workspaceAnalyticsSchema);
 }
 
 export async function persistRoom(workspaceId: string, draft: RoomDraft, running: boolean) {

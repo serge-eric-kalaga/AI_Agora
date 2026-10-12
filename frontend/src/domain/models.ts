@@ -41,6 +41,19 @@ export const messageSchema = z.object({
   text: z.string(),
   createdAt: z.string(),
   reactions: z.record(z.string(), z.array(z.string())),
+  reactionActors: z
+    .record(
+      z.string(),
+      z.array(
+        z.object({
+          id: z.string(),
+          name: z.string(),
+          kind: z.enum(['user', 'agent']),
+          isMe: z.boolean(),
+        }),
+      ),
+    )
+    .optional(),
   replyTo: z.string().optional(),
 });
 export const roomSchema = z.object({

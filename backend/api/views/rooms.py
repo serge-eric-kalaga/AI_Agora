@@ -24,6 +24,7 @@ from api.database.models import (
     Room,
     RoomParticipant,
     RoomStatus,
+    User,
 )
 from api.dependencies import (
     CurrentUser,
@@ -39,6 +40,7 @@ from api.schemas.rooms import (
     MessageRead,
     ParticipantRead,
     ParticipantUpdate,
+    ReactionActorRead,
     ReactionRead,
     ReactionUpdate,
     RoomCreate,
@@ -117,12 +119,58 @@ def _message_read(db: DbSession, message: Message, user_id: UUID) -> MessageRead
             MessageReaction.emoji,
             MessageReaction.user_id,
             MessageReaction.agent_id,
-        ).where(
-            MessageReaction.message_id == message.id
+            MessageReaction.created_at,
         )
+        .where(MessageReaction.message_id == message.id)
+        .order_by(MessageReaction.created_at)
     ).all()
-    counts = Counter(emoji for emoji, _, _ in rows)
-    mine = {emoji for emoji, reaction_user_id, _ in rows if reaction_user_id == user_id}
+    counts = Counter(emoji for emoji, _, _, _ in rows)
+    mine = {emoji for emoji, reaction_user_id, _, _ in rows if reaction_user_id == user_id}
+    user_ids = {reaction_user_id for _, reaction_user_id, _, _ in rows if reaction_user_id}
+    agent_ids = {reaction_agent_id for _, _, reaction_agent_id, _ in rows if reaction_agent_id}
+    user_names: dict[UUID, str] = {}
+    if user_ids:
+        user_names = {
+            actor_id: username
+            for actor_id, username in db.execute(
+                select(User.id, User.username).where(User.id.in_(user_ids))
+            )
+        }
+    agent_names: dict[UUID, str] = {}
+    if agent_ids:
+        agent_names = {
+            actor_id: name
+            for actor_id, name in db.execute(
+                select(AgentDefinition.id, AgentDefinition.name).where(
+                    AgentDefinition.id.in_(agent_ids)
+                )
+            )
+        }
+
+    def reaction_actors(emoji: str) -> list[ReactionActorRead]:
+        actors: list[ReactionActorRead] = []
+        for reaction_emoji, reaction_user_id, reaction_agent_id, _ in rows:
+            if reaction_emoji != emoji or len(actors) >= 3:
+                continue
+            if reaction_agent_id:
+                actors.append(
+                    ReactionActorRead(
+                        id=reaction_agent_id,
+                        display_name=agent_names.get(reaction_agent_id, "Agent"),
+                        kind="agent",
+                    )
+                )
+            elif reaction_user_id:
+                actors.append(
+                    ReactionActorRead(
+                        id=reaction_user_id,
+                        display_name=user_names.get(reaction_user_id, "Membre"),
+                        kind="user",
+                        is_me=reaction_user_id == user_id,
+                    )
+                )
+        return actors
+
     return MessageRead(
         id=message.id,
         room_id=message.room_id,
@@ -139,9 +187,10 @@ def _message_read(db: DbSession, message: Message, user_id: UUID) -> MessageRead
                 reacted_by_me=emoji in mine,
                 agent_ids=[
                     reaction_agent_id
-                    for reaction_emoji, _, reaction_agent_id in rows
+                    for reaction_emoji, _, reaction_agent_id, _ in rows
                     if reaction_emoji == emoji and reaction_agent_id is not None
                 ],
+                actors=reaction_actors(emoji),
             )
             for emoji, count in sorted(counts.items())
         ],
@@ -239,7 +288,9 @@ def create_room(
 
 
 @router.get("/{room_id}", response_model=RoomRead, summary="Lire une arène")
-def get_room(workspace_id: UUID, room_id: UUID, db: DbSession, current_user: CurrentUser) -> RoomRead:
+def get_room(
+    workspace_id: UUID, room_id: UUID, db: DbSession, current_user: CurrentUser
+) -> RoomRead:
     require_workspace_member(db, workspace_id, current_user)
     return _room_read(_room(db, workspace_id, room_id))
 
@@ -260,7 +311,9 @@ def set_room_status(
     require_workspace_editor(db, workspace_id, current_user)
     room = _room(db, workspace_id, room_id)
     if room.version != payload.expected_version:
-        raise ConflictError("stale_room_version", "L'arène a changé; rechargez-la avant de réessayer.")
+        raise ConflictError(
+            "stale_room_version", "L'arène a changé; rechargez-la avant de réessayer."
+        )
     transitions = {
         RoomStatus.DRAFT: {RoomStatus.RUNNING, RoomStatus.STOPPED},
         RoomStatus.RUNNING: {RoomStatus.PAUSED, RoomStatus.STOPPED},
@@ -269,10 +322,14 @@ def set_room_status(
     }
     target = RoomStatus(payload.status)
     if target not in transitions[room.status]:
-        raise ConflictError("invalid_room_transition", f"Transition {room.status.value} → {target.value} interdite.")
+        raise ConflictError(
+            "invalid_room_transition", f"Transition {room.status.value} → {target.value} interdite."
+        )
     active_count = sum(1 for item in room.participants if item.is_active)
     if target == RoomStatus.RUNNING and active_count < 2:
-        raise ConflictError("not_enough_participants", "Deux agents actifs sont requis pour démarrer.")
+        raise ConflictError(
+            "not_enough_participants", "Deux agents actifs sont requis pour démarrer."
+        )
     room.status = target
     room.version += 1
     if target == RoomStatus.RUNNING and room.started_at is None:
@@ -317,7 +374,9 @@ def set_participant(
     if room.status == RoomStatus.STOPPED:
         raise ConflictError("room_stopped", "Une arène arrêtée ne peut plus être modifiée.")
     if room.version != payload.expected_version:
-        raise ConflictError("stale_room_version", "L'arène a changé; rechargez-la avant de réessayer.")
+        raise ConflictError(
+            "stale_room_version", "L'arène a changé; rechargez-la avant de réessayer."
+        )
     _validate_agents(db, workspace_id, [agent_id])
     participant = db.scalar(
         select(RoomParticipant).where(
@@ -357,7 +416,9 @@ def list_messages(
     room_id: UUID,
     db: DbSession,
     current_user: CurrentUser,
-    before: UUID | None = Query(default=None, description="Identifiant du plus ancien message affiché."),
+    before: UUID | None = Query(
+        default=None, description="Identifiant du plus ancien message affiché."
+    ),
     limit: int = Query(default=50, ge=1, le=100),
 ) -> Page[MessageRead]:
     require_workspace_member(db, workspace_id, current_user)
@@ -408,18 +469,26 @@ def create_message(
     require_workspace_editor(db, workspace_id, current_user)
     room = _room(db, workspace_id, room_id)
     existing = db.scalar(
-        select(Message).where(Message.room_id == room_id, Message.idempotency_key == idempotency_key)
+        select(Message).where(
+            Message.room_id == room_id, Message.idempotency_key == idempotency_key
+        )
     )
     if existing:
         return _message_read(db, existing, current_user.id)
     if room.status == RoomStatus.STOPPED:
-        raise ConflictError("room_stopped", "Aucun message ne peut être ajouté à une arène arrêtée.")
+        raise ConflictError(
+            "room_stopped", "Aucun message ne peut être ajouté à une arène arrêtée."
+        )
     if room.amount_spent >= room.budget_limit:
-        raise DomainError("cost_budget_exhausted", "Le budget financier de l'arène est épuisé.", 422)
+        raise DomainError(
+            "cost_budget_exhausted", "Le budget financier de l'arène est épuisé.", 422
+        )
     if payload.reply_to_id:
         reply = db.get(Message, payload.reply_to_id)
         if not reply or reply.room_id != room.id:
-            raise DomainError("invalid_reply", "Le message cité n'appartient pas à cette arène.", 422)
+            raise DomainError(
+                "invalid_reply", "Le message cité n'appartient pas à cette arène.", 422
+            )
     message = Message(
         room_id=room.id,
         author_user_id=current_user.id,
@@ -493,7 +562,9 @@ def set_reaction(
     return _message_read(db, message, current_user.id)
 
 
-@router.get("/{room_id}/events", response_model=Page[EventRead], summary="Relire les événements ordonnés")
+@router.get(
+    "/{room_id}/events", response_model=Page[EventRead], summary="Relire les événements ordonnés"
+)
 def list_events(
     workspace_id: UUID,
     room_id: UUID,

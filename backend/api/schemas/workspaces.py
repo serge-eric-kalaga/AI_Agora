@@ -1,6 +1,7 @@
 """Schemas des espaces collaboratifs."""
 
 from datetime import datetime
+from decimal import Decimal
 from uuid import UUID
 
 from pydantic import Field, field_validator
@@ -34,3 +35,32 @@ class WorkspaceRead(APIModel):
     owner_id: UUID
     role: WorkspaceRole | None = None
     created_at: datetime
+
+
+class AgentContributionRead(APIModel):
+    agent_id: UUID
+    message_count: int = Field(ge=0)
+
+
+class AnalyticsEventRead(APIModel):
+    id: UUID
+    room_id: UUID
+    room_name: str
+    event_type: str
+    actor_agent_id: UUID | None = None
+    occurred_at: datetime
+
+
+class WorkspaceAnalyticsRead(APIModel):
+    """Mesures persistées calculées sur toutes les arènes d'un espace."""
+
+    total_messages: int = Field(ge=0)
+    human_messages: int = Field(ge=0)
+    agent_messages: int = Field(ge=0)
+    total_reactions: int = Field(ge=0)
+    cloud_cost: Decimal = Field(ge=0)
+    cloud_tokens: int = Field(ge=0)
+    local_tokens: int = Field(ge=0)
+    active_agents: int = Field(ge=0)
+    contributions: list[AgentContributionRead]
+    recent_events: list[AnalyticsEventRead]
