@@ -3,6 +3,7 @@
 from datetime import datetime, timezone
 from uuid import UUID, uuid4
 
+import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import func, select
 
@@ -15,7 +16,12 @@ from api.database.models import (
     ProviderKind,
     Room,
 )
-from api.services.model_clients import ModelRequest, ModelResult, generate_model_response
+from api.services.model_clients import (
+    ModelProviderError,
+    ModelRequest,
+    ModelResult,
+    generate_model_response,
+)
 from api.services.orchestration import execute_room_turn, record_room_failure
 
 
@@ -84,10 +90,13 @@ def test_local_turn_is_idempotent_and_accounts_for_tokens(
             ).order_by(ConversationEvent.sequence.desc())
         )
     assert event_id
-    monkeypatch.setattr(
-        "api.services.orchestration.generate_model_response",
-        lambda provider, request: ModelResult("Je recommande de sécuriser le flux temps réel.", 30, 12),
-    )
+    requests: list[ModelRequest] = []
+
+    def fake_generation(provider, request: ModelRequest) -> ModelResult:
+        requests.append(request)
+        return ModelResult("Je recommande de sécuriser le flux temps réel.", 30, 12)
+
+    monkeypatch.setattr("api.services.orchestration.generate_model_response", fake_generation)
 
     result = execute_room_turn(UUID(room["id"]), event_id)
     followup = execute_room_turn(UUID(room["id"]), UUID(result["eventId"]))
@@ -96,6 +105,9 @@ def test_local_turn_is_idempotent_and_accounts_for_tokens(
     assert result["status"] == "completed"
     assert followup["status"] == "completed"
     assert replay["status"] == "already_completed"
+    assert requests[0].messages[-1]["role"] == "user"
+    assert requests[1].messages[-1]["role"] == "user"
+    assert requests[1].messages[-1]["content"].startswith("Mini B:")
     with SessionLocal() as db:
         stored_room = db.get(Room, UUID(room["id"]))
         agent_messages = db.scalar(
@@ -173,6 +185,44 @@ def test_ollama_request_disables_hidden_reasoning(monkeypatch) -> None:
     payload = captured["json"]
     assert isinstance(payload, dict)
     assert payload["think"] is False
+
+
+def test_empty_ollama_response_is_retryable(monkeypatch) -> None:
+    """Une réponse vide transitoire doit laisser Celery relancer le tour."""
+
+    class FakeResponse:
+        def raise_for_status(self) -> None:
+            return None
+
+        def json(self) -> dict[str, object]:
+            return {"message": {"content": ""}, "done_reason": "stop"}
+
+    class FakeClient:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args) -> None:
+            return None
+
+        def post(self, url: str, **kwargs) -> FakeResponse:
+            return FakeResponse()
+
+    monkeypatch.setattr("api.services.model_clients.httpx.Client", lambda **kwargs: FakeClient())
+    monkeypatch.setattr("api.services.model_clients._validate_destination", lambda url: None)
+    provider = ProviderConnection(
+        kind=ProviderKind.LOCAL,
+        base_url="http://ollama.test:11434",
+        encrypted_api_key=None,
+    )
+
+    with pytest.raises(ModelProviderError) as error:
+        generate_model_response(
+            provider,
+            ModelRequest("qwen3.5:4b", "Réponds brièvement.", [{"role": "user", "content": "Test"}]),
+        )
+
+    assert error.value.code == "empty_model_response"
+    assert error.value.retryable is True
 
 
 def test_provider_diagnostic_refreshes_discovered_models(

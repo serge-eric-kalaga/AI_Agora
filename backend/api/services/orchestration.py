@@ -120,7 +120,10 @@ def _prepare_turn(room_id: UUID, trigger_event_id: UUID) -> TurnContext | None:
         ).all()
         messages = [
             {
-                "role": "assistant" if message.author_agent_id else "user",
+                # Chaque modèle ne doit voir comme réponses `assistant` que ses
+                # propres contributions. Les autres agents sont des interlocuteurs ;
+                # ce rôle garantit aussi qu'un nouveau tour est réellement demandé.
+                "role": "assistant" if message.author_agent_id == agent.id else "user",
                 "content": (
                     f"{names.get(message.author_agent_id, 'Agent')}: {message.content}"
                     if message.author_agent_id

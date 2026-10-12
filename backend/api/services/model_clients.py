@@ -128,6 +128,9 @@ def generate_model_response(provider: ProviderConnection, request: ModelRequest)
         raise ModelProviderError(
             "Le fournisseur IA n'a produit aucun contenu.",
             code="empty_model_response",
-            retryable=False,
+            # Ollama peut exceptionnellement terminer une génération sans contenu,
+            # notamment juste après le chargement d'un modèle. Une nouvelle tentative
+            # bornée est sûre car la persistance du tour est idempotente.
+            retryable=True,
         )
     return ModelResult(content.strip(), prompt_tokens, completion_tokens)
