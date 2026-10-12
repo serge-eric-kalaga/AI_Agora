@@ -13,7 +13,7 @@ export default defineConfig({
     screenshot: 'only-on-failure',
   },
   webServer: {
-    command: 'npm run dev -- --port 3000',
+    command: 'NEXT_PUBLIC_DATA_MODE=demo npm run dev -- --port 3000',
     url: 'http://127.0.0.1:3000',
     reuseExistingServer: true,
   },

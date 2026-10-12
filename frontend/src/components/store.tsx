@@ -9,66 +9,231 @@ import {
   type ReactNode,
 } from 'react';
 import { transition, type Command, type Envelope } from '@/domain/engine';
-import type { AgoraState } from '@/domain/models';
+import type {
+  Agent,
+  AgentDraft,
+  AgoraState,
+  AgoraUser,
+  Provider,
+  Workspace,
+} from '@/domain/models';
 import { LocalAgoraRepository } from '@/data/repository';
+import {
+  authenticate,
+  endSession,
+  listWorkspaceData,
+  listWorkspaces,
+  persistAgent,
+  persistProvider,
+  readSession,
+} from '@/data/http-api';
 import { seed } from '@/data/seed';
 import { t } from '@/i18n';
+
 const repository = new LocalAgoraRepository();
+const demoMode = process.env.NEXT_PUBLIC_DATA_MODE === 'demo';
+const workspaceStorageKey = 'ai-agora.active-workspace';
+
 type Store = {
   state: AgoraState;
   ready: boolean;
+  mode: 'demo' | 'api';
+  user: AgoraUser | null;
+  workspaces: Workspace[];
+  activeWorkspaceId: string | null;
   dispatch: (command: Command) => void;
+  login: (payload: { login: string; password: string }) => Promise<void>;
+  register: (payload: { email: string; username: string; password: string }) => Promise<void>;
+  logout: () => Promise<void>;
+  selectWorkspace: (id: string) => Promise<void>;
+  saveProvider: (provider: Provider, apiKey?: string) => Promise<Provider>;
+  saveAgent: (draft: AgentDraft, existing?: Agent) => Promise<Agent>;
   storageWarning: string;
   toast: string;
   notify: (text: string) => void;
 };
+
+type StoreAction =
+  | Envelope
+  | { hydrate: AgoraState }
+  | { remote: Pick<AgoraState, 'agents' | 'providers'> }
+  | { agent: Agent }
+  | { provider: Provider };
+
 const Context = createContext<Store | null>(null);
-function reducer(state: AgoraState, action: Envelope | { hydrate: AgoraState }) {
-  return 'hydrate' in action ? action.hydrate : transition(state, action);
+
+function reducer(state: AgoraState, action: StoreAction): AgoraState {
+  if ('hydrate' in action) return action.hydrate;
+  if ('remote' in action)
+    return { ...state, ...action.remote, rooms: [], messages: [], events: [] };
+  if ('agent' in action) {
+    const exists = state.agents.some((agent) => agent.id === action.agent.id);
+    return {
+      ...state,
+      agents: exists
+        ? state.agents.map((agent) => (agent.id === action.agent.id ? action.agent : agent))
+        : [...state.agents, action.agent],
+    };
+  }
+  if ('provider' in action) {
+    const exists = state.providers.some((provider) => provider.id === action.provider.id);
+    return {
+      ...state,
+      providers: exists
+        ? state.providers.map((provider) =>
+            provider.id === action.provider.id ? action.provider : provider,
+          )
+        : [...state.providers, action.provider],
+    };
+  }
+  return transition(state, action);
 }
+
 export function AgoraProvider({ children }: { children: ReactNode }) {
   const [state, send] = useReducer(reducer, seed);
   const [ready, setReady] = useState(false);
+  const [user, setUser] = useState<AgoraUser | null>(null);
+  const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
+  const [activeWorkspaceId, setActiveWorkspaceId] = useState<string | null>(null);
   const [storageWarning, setStorageWarning] = useState('');
   const [toast, notify] = useState('');
+
+  const loadAccount = useCallback(async () => {
+    const available = await listWorkspaces();
+    const remembered = window.localStorage.getItem(workspaceStorageKey);
+    const selected = available.find((workspace) => workspace.id === remembered) ?? available[0];
+    setWorkspaces(available);
+    setActiveWorkspaceId(selected?.id ?? null);
+    if (!selected) {
+      send({ remote: { agents: [], providers: [] } });
+      return;
+    }
+    window.localStorage.setItem(workspaceStorageKey, selected.id);
+    send({ remote: await listWorkspaceData(selected.id) });
+  }, []);
+
   useEffect(() => {
     let cancelled = false;
-    repository
-      .load()
-      .then((result) => {
-        if (!cancelled) {
+    async function bootstrap() {
+      try {
+        if (demoMode) {
+          const result = await repository.load();
+          if (cancelled) return;
           send({ hydrate: result.state });
           if (result.recovered) setStorageWarning(t.shell.storageInvalid);
-          setReady(true);
+        } else {
+          const currentUser = await readSession();
+          if (cancelled) return;
+          setUser(currentUser);
+          if (currentUser) await loadAccount();
         }
-      })
-      .catch(() => {
-        if (!cancelled) {
-          setStorageWarning(t.shell.storageError);
-          setReady(true);
-        }
-      });
+      } catch (error) {
+        if (!cancelled)
+          setStorageWarning(error instanceof Error ? error.message : t.shell.storageError);
+      } finally {
+        if (!cancelled) setReady(true);
+      }
+    }
+    void bootstrap();
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [loadAccount]);
+
   useEffect(() => {
-    if (ready) repository.save(state).catch(() => setStorageWarning(t.shell.storageError));
+    if (demoMode && ready)
+      repository.save(state).catch(() => setStorageWarning(t.shell.storageError));
   }, [state, ready]);
+
   useEffect(() => {
     if (!toast) return;
     const timer = setTimeout(() => notify(''), 3500);
     return () => clearTimeout(timer);
   }, [toast]);
+
   const dispatch = useCallback((command: Command) => {
     send({ command, id: crypto.randomUUID(), now: new Date().toISOString() });
   }, []);
+
+  async function establishSession(action: 'login' | 'register', payload: Record<string, string>) {
+    setReady(false);
+    try {
+      setUser(await authenticate(action, payload));
+      await loadAccount();
+    } finally {
+      setReady(true);
+    }
+  }
+
+  async function logout() {
+    await endSession();
+    setUser(null);
+    setWorkspaces([]);
+    setActiveWorkspaceId(null);
+    send({ remote: { agents: [], providers: [] } });
+  }
+
+  async function selectWorkspace(id: string) {
+    if (!workspaces.some((workspace) => workspace.id === id)) return;
+    setReady(false);
+    try {
+      send({ remote: await listWorkspaceData(id) });
+      setActiveWorkspaceId(id);
+      window.localStorage.setItem(workspaceStorageKey, id);
+    } finally {
+      setReady(true);
+    }
+  }
+
+  async function saveProvider(provider: Provider, apiKey?: string) {
+    if (demoMode) {
+      dispatch({ type: 'provider.save', provider });
+      return provider;
+    }
+    if (!activeWorkspaceId) throw new Error(t.session.noWorkspace);
+    const saved = await persistProvider(activeWorkspaceId, provider, apiKey);
+    send({ provider: saved });
+    return saved;
+  }
+
+  async function saveAgent(draft: AgentDraft, existing?: Agent) {
+    if (demoMode) {
+      const saved: Agent = { ...draft, id: existing?.id ?? crypto.randomUUID(), version: 1 };
+      dispatch({ type: 'agent.save', agent: saved });
+      return saved;
+    }
+    if (!activeWorkspaceId) throw new Error(t.session.noWorkspace);
+    const saved = await persistAgent(activeWorkspaceId, draft, existing);
+    send({ agent: saved });
+    return saved;
+  }
+
   return (
-    <Context.Provider value={{ state, ready, dispatch, storageWarning, toast, notify }}>
+    <Context.Provider
+      value={{
+        state,
+        ready,
+        mode: demoMode ? 'demo' : 'api',
+        user,
+        workspaces,
+        activeWorkspaceId,
+        dispatch,
+        login: (payload) => establishSession('login', payload),
+        register: (payload) => establishSession('register', payload),
+        logout,
+        selectWorkspace,
+        saveProvider,
+        saveAgent,
+        storageWarning,
+        toast,
+        notify,
+      }}
+    >
       {children}
     </Context.Provider>
   );
 }
+
 export function useAgora() {
   const store = useContext(Context);
   if (!store) throw new Error('AgoraProvider missing');

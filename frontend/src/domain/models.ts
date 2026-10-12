@@ -8,6 +8,7 @@ export const providerSchema = z.object({
   connected: z.boolean(),
   endpoint: z.string(),
   color: z.string(),
+  hasApiKey: z.boolean().default(false),
 });
 export const toolIds = ['web', 'files', 'code'] as const;
 export type ToolId = (typeof toolIds)[number];
@@ -30,6 +31,7 @@ export const agentSchema = z.object({
   tools: z.array(z.enum(toolIds)),
   temperature: z.number(),
   maxTokens: z.number(),
+  version: z.number().int().positive().default(1),
 });
 export const messageSchema = z.object({
   id: z.string(),
@@ -94,4 +96,21 @@ export type RoomDraft = Omit<
   | 'createdAt'
   | 'startedAt'
 >;
-export type AgentDraft = Omit<Agent, 'id'>;
+export type AgentDraft = Omit<Agent, 'id' | 'version'>;
+
+export type AgoraUser = {
+  id: string;
+  email: string;
+  username: string;
+  isActive: boolean;
+  createdAt: string;
+};
+
+export type Workspace = {
+  id: string;
+  name: string;
+  slug: string;
+  ownerId: string;
+  role: 'owner' | 'editor' | 'viewer' | null;
+  createdAt: string;
+};

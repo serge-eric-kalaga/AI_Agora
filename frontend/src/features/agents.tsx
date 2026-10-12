@@ -46,7 +46,7 @@ export function ToolChips({ tools }: { tools: ToolId[] }) {
   );
 }
 export function Agents() {
-  const { state, dispatch, notify } = useAgora();
+  const { state, saveAgent, notify } = useAgora();
   const [query, setQuery] = useState(''),
     [provider, setProvider] = useState('all'),
     [status, setStatus] = useState('all');
@@ -122,15 +122,12 @@ export function Agents() {
                     aria-label={`${t.common.duplicate} ${agent.name}`}
                     title={t.common.duplicate}
                     onClick={() => {
-                      dispatch({
-                        type: 'agent.save',
-                        agent: {
-                          ...agent,
-                          id: crypto.randomUUID(),
-                          name: `${agent.name} ${t.agents.cloneSuffix}`,
-                        },
-                      });
-                      notify(t.agents.cloned);
+                      const { id, version, ...draft } = agent;
+                      void id;
+                      void version;
+                      void saveAgent({ ...draft, name: `${agent.name} ${t.agents.cloneSuffix}` })
+                        .then(() => notify(t.agents.cloned))
+                        .catch((reason) => notify(reason.message));
                     }}
                   >
                     <Copy size={16} />
@@ -176,9 +173,14 @@ export function Agents() {
                     className="icon-button bordered"
                     aria-label={`${agent.active ? t.agents.suspend : t.agents.activate} ${agent.name}`}
                     title={agent.active ? t.agents.suspend : t.agents.activate}
-                    onClick={() =>
-                      dispatch({ type: 'agent.save', agent: { ...agent, active: !agent.active } })
-                    }
+                    onClick={() => {
+                      const { id, version, ...draft } = agent;
+                      void id;
+                      void version;
+                      void saveAgent({ ...draft, active: !agent.active }, agent).catch((reason) =>
+                        notify(reason.message),
+                      );
+                    }}
                   >
                     {agent.active ? <Pause size={14} /> : <Play size={14} />}
                   </button>
@@ -255,12 +257,19 @@ export function AgentEditor({ id }: { id?: string }) {
   return <EditorForm key={id ?? 'new'} existing={existing} />;
 }
 function EditorForm({ existing }: { existing?: Agent }) {
-  const { state, dispatch, notify } = useAgora();
+  const { state, saveAgent, notify } = useAgora();
   const router = useRouter();
-  const [draft, setDraft] = useState<AgentDraft>(existing ?? blank),
+  const [draft, setDraft] = useState<AgentDraft>(
+      existing ?? {
+        ...blank,
+        providerId: state.providers[0]?.id ?? '',
+        model: state.providers[0]?.models[0] ?? '',
+      },
+    ),
     [section, setSection] = useState(0),
     [profile, setProfile] = useState(0),
-    [error, setError] = useState('');
+    [error, setError] = useState(''),
+    [saving, setSaving] = useState(false);
   const update = <K extends keyof AgentDraft>(key: K, value: AgentDraft[K]) =>
     setDraft((d) => ({ ...d, [key]: value }));
   const provider = state.providers.find((p) => p.id === draft.providerId);
@@ -277,19 +286,22 @@ function EditorForm({ existing }: { existing?: Agent }) {
       systemPrompt: t.editor.profilePrompts[profile],
     }));
   }
-  function save() {
-    if (!draft.name.trim() || !draft.role.trim() || !draft.systemPrompt.trim()) {
+  async function save() {
+    if (!draft.name.trim() || !draft.role.trim() || !draft.systemPrompt.trim() || !provider) {
       setError(t.common.required);
       setSection(!draft.name.trim() || !draft.role.trim() ? 0 : 2);
       return;
     }
-    const id = existing?.id ?? crypto.randomUUID();
-    dispatch({
-      type: 'agent.save',
-      agent: { ...draft, id, name: draft.name.trim(), role: draft.role.trim() },
-    });
-    notify(existing ? t.editor.updated : t.editor.created);
-    router.push('/fr/agents');
+    setSaving(true);
+    try {
+      await saveAgent({ ...draft, name: draft.name.trim(), role: draft.role.trim() }, existing);
+      notify(existing ? t.editor.updated : t.editor.created);
+      router.push('/fr/agents');
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : t.session.genericError);
+    } finally {
+      setSaving(false);
+    }
   }
   return (
     <div className="page">
@@ -565,9 +577,9 @@ function EditorForm({ existing }: { existing?: Agent }) {
                 <ArrowRight size={16} />
               </button>
             ) : (
-              <button className="button primary" onClick={save}>
+              <button className="button primary" onClick={() => void save()} disabled={saving}>
                 <Save size={16} />
-                {t.editor.save}
+                {saving ? t.common.saving : t.editor.save}
               </button>
             )}
           </div>

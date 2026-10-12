@@ -72,7 +72,7 @@ export function RoomCard({ room }: { room: Room }) {
   );
 }
 export function Dashboard() {
-  const { state } = useAgora();
+  const { state, mode } = useAgora();
   const running = state.rooms.filter((r) => r.status === 'running').length;
   const messageCount = state.messages.filter((m) => m.kind === 'message').length;
   const metrics = [
@@ -133,7 +133,7 @@ export function Dashboard() {
             </span>
             <span className="muted">
               <span className="status-dot" />
-              {t.dashboard.stored}
+              {mode === 'api' ? t.dashboard.backendStored : t.dashboard.stored}
             </span>
           </div>
         </div>
@@ -213,7 +213,7 @@ export function Dashboard() {
           </div>
           <div className="panel-foot">
             <span className="status-dot text-green" />
-            {t.demoDetail}
+            {mode === 'api' ? t.dashboard.apiDetail : t.demoDetail}
           </div>
         </section>
         <section className="panel">

@@ -78,6 +78,7 @@ const agents: Agent[] = [
       systemPrompt: `Tu es ${a.name}, ${a.role.toLowerCase()}. ${a.description} Distingue les faits des hypothèses et respecte les participants.`,
       temperature: 0.7,
       maxTokens: 1024,
+      version: 1,
     }) as Agent,
 );
 const roomBase = {
@@ -159,6 +160,7 @@ export const seed: AgoraState = {
       connected: true,
       endpoint: '',
       color: 'green',
+      hasApiKey: false,
     },
     {
       id: 'anthropic',
@@ -168,6 +170,7 @@ export const seed: AgoraState = {
       connected: true,
       endpoint: '',
       color: 'amber',
+      hasApiKey: false,
     },
     {
       id: 'deepseek',
@@ -177,6 +180,7 @@ export const seed: AgoraState = {
       connected: true,
       endpoint: '',
       color: 'blue',
+      hasApiKey: false,
     },
     {
       id: 'qwen',
@@ -186,6 +190,7 @@ export const seed: AgoraState = {
       connected: false,
       endpoint: '',
       color: 'violet',
+      hasApiKey: false,
     },
     {
       id: 'ollama',
@@ -195,6 +200,7 @@ export const seed: AgoraState = {
       connected: true,
       endpoint: 'http://localhost:11434',
       color: 'cyan',
+      hasApiKey: false,
     },
   ],
   messages: [

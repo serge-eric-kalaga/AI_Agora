@@ -1,7 +1,7 @@
 'use client';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import {
   LayoutDashboard,
   MessagesSquare,
@@ -24,6 +24,7 @@ import {
   Menu,
   Check,
   X,
+  LogOut,
 } from 'lucide-react';
 import { useAgora } from './store';
 import { Avatar, Badge, Empty, Modal, Progress } from './ui';
@@ -40,7 +41,19 @@ const navigation = [
 ] as const;
 export function Shell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
-  const { state, ready, storageWarning, toast } = useAgora();
+  const router = useRouter();
+  const {
+    state,
+    ready,
+    mode,
+    user,
+    workspaces,
+    activeWorkspaceId,
+    selectWorkspace,
+    logout,
+    storageWarning,
+    toast,
+  } = useAgora();
   const [collapsed, setCollapsed] = useState(false),
     [mobile, setMobile] = useState(false),
     [searchOpen, setSearchOpen] = useState(false),
@@ -84,6 +97,22 @@ export function Shell({ children }: { children: ReactNode }) {
       previous?.focus();
     };
   }, [mobile]);
+  const isConnectionPage = pathname.endsWith('/connexion');
+  useEffect(() => {
+    if (!ready || mode === 'demo') return;
+    if (!user && !isConnectionPage) router.replace('/fr/connexion');
+    if (user && isConnectionPage) router.replace('/fr');
+  }, [isConnectionPage, mode, ready, router, user]);
+
+  if (mode === 'api' && isConnectionPage) return children;
+  if (!ready || (mode === 'api' && !user)) {
+    return (
+      <div className="loading full-page">
+        <span className="loader" />
+        {t.common.loading}
+      </div>
+    );
+  }
   const total = state.rooms.reduce((sum, r) => sum + r.spent, 0),
     budget = state.rooms.reduce((sum, r) => sum + r.budget, 0);
   const active = state.rooms.filter((r) => r.status === 'running').length;
@@ -142,16 +171,30 @@ export function Shell({ children }: { children: ReactNode }) {
             <X size={20} />
           </button>
         </div>
-        <div className="workspace-switch">
+        <label className="workspace-switch">
           <span className="workspace-icon">
             <FlaskConical size={19} />
           </span>
-          <span>
-            <strong>{t.workspace}</strong>
-            <small>{t.workspaceDetail}</small>
-          </span>
+          {mode === 'api' ? (
+            <select
+              aria-label={t.workspaceCaption}
+              value={activeWorkspaceId ?? ''}
+              onChange={(event) => void selectWorkspace(event.target.value)}
+            >
+              {workspaces.map((workspace) => (
+                <option key={workspace.id} value={workspace.id}>
+                  {workspace.name}
+                </option>
+              ))}
+            </select>
+          ) : (
+            <span>
+              <strong>{t.workspace}</strong>
+              <small>{t.workspaceDetail}</small>
+            </span>
+          )}
           <ChevronsUpDown size={14} />
-        </div>
+        </label>
         <div className="nav-caption">{t.workspaceCaption}</div>
         <nav>
           {navigation.map(({ key, path, icon: Icon }) => {
@@ -187,15 +230,28 @@ export function Shell({ children }: { children: ReactNode }) {
           </div>
           <div className="demo-note">
             <FlaskConical size={14} />
-            <span>{t.demo}</span>
+            <span>{mode === 'api' ? t.session.connected : t.demo}</span>
           </div>
           <div className="profile">
-            <span className="profile-avatar">EX</span>
+            <span className="profile-avatar">
+              {user?.username.slice(0, 2).toUpperCase() ?? 'EX'}
+            </span>
             <div>
-              <strong>{t.shell.profile}</strong>
-              <small>{t.shell.plan}</small>
+              <strong>{user?.username ?? t.shell.profile}</strong>
+              <small>{mode === 'api' ? user?.email : t.shell.plan}</small>
             </div>
-            <Badge tone="violet">FR</Badge>
+            {mode === 'api' ? (
+              <button
+                className="icon-button"
+                title={t.session.logout}
+                aria-label={t.session.logout}
+                onClick={() => void logout().then(() => router.replace('/fr/connexion'))}
+              >
+                <LogOut size={16} />
+              </button>
+            ) : (
+              <Badge tone="violet">FR</Badge>
+            )}
           </div>
         </div>
       </aside>
@@ -227,7 +283,7 @@ export function Shell({ children }: { children: ReactNode }) {
           <div className="topbar-actions">
             <Link href="/fr/providers" className="infrastructure-status">
               <span className="status-dot" />
-              {t.common.simulated}
+              {mode === 'api' ? t.session.connected : t.common.simulated}
               <ChevronDown size={13} />
             </Link>
             <button

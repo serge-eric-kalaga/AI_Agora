@@ -40,7 +40,7 @@ services:
       REDIS_URL: redis://redis:6379/0
       JWT_SECRET: ${JWT_SECRET:-change-this-development-secret}
       CREDENTIAL_ENCRYPTION_KEY: ${CREDENTIAL_ENCRYPTION_KEY:-}
-      FRONTEND_ORIGINS: ${FRONTEND_ORIGINS:-http://localhost:3000,http://127.0.0.1:3000}
+      FRONTEND_ORIGINS: '${FRONTEND_ORIGINS:-["http://localhost:3000","http://127.0.0.1:3000"]}'
       ALLOW_PRIVATE_PROVIDER_ENDPOINTS: "true"
       RUN_MIGRATIONS: "true"
     depends_on:
@@ -78,7 +78,7 @@ services:
         NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:8000/api/v1}
     restart: unless-stopped
     environment:
-      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:8000/api/v1}
+      AGORA_API_INTERNAL_URL: http://backend:8000/api/v1
     depends_on:
       backend:
         condition: service_healthy
