@@ -1,147 +1,148 @@
-from api.configs import SETTINGS
-from pydantic_settings import BaseSettings
-from fastapi import FastAPI
+"""Fabrique de l'application FastAPI AI Agora."""
+
+import logging
+from typing import Any
+
+from fastapi import FastAPI, HTTPException, Request
+from fastapi.exceptions import RequestValidationError
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
+from prometheus_fastapi_instrumentator import Instrumentator
+
+from api.configs import Settings, get_settings
+from api.errors import DomainError
+from api.middleware.request_context import RequestContextMiddleware
+from api.schemas.common import ErrorResponse
+from api.views import (
+    agents_router,
+    auth_router,
+    health_router,
+    providers_router,
+    rooms_router,
+    workspaces_router,
+)
+
+DESCRIPTION = """
+API transactionnelle de **AI Agora**, une plateforme où plusieurs agents IA
+collaborent dans des arènes supervisées.
+
+### Principes du contrat
+
+* authentification OAuth2 Bearer par JWT ;
+* isolation des ressources par espace de travail ;
+* commandes sensibles idempotentes via `X-Idempotency-Key` ;
+* contrôle de version pour prévenir les modifications concurrentes ;
+* événements ordonnés, relisibles en REST et diffusés en SSE ;
+* secrets fournisseurs chiffrés et jamais renvoyés au client.
+"""
+
+TAGS = [
+    {"name": "Authentification", "description": "Création de compte et jetons d'accès."},
+    {"name": "Espaces de travail", "description": "Isolation multi-utilisateur et audit."},
+    {"name": "Fournisseurs IA", "description": "Connexions chiffrées aux modèles cloud ou locaux."},
+    {"name": "Agents IA", "description": "Personas, prompts, modèles et paramètres de génération."},
+    {"name": "Arènes", "description": "Participants, états, messages, réactions et événements."},
+    {"name": "Santé", "description": "Sondes Docker et diagnostic des dépendances."},
+]
+
+COMMON_RESPONSES: dict[int | str, dict[str, Any]] = {
+    401: {
+        "model": ErrorResponse,
+        "description": "Jeton absent, invalide ou expiré.",
+    },
+    403: {
+        "model": ErrorResponse,
+        "description": "Le compte authentifié ne possède pas le rôle requis.",
+    },
+    409: {
+        "model": ErrorResponse,
+        "description": "Conflit d'unicité, d'état ou de version concurrente.",
+    },
+    422: {
+        "model": ErrorResponse,
+        "description": "Requête syntaxiquement valide mais refusée par la validation métier.",
+    },
+}
 
 
-def createApp(config: SETTINGS) -> FastAPI:
-    from api.configs.config import Setting
-    import werkzeug.exceptions as werkexcept
-    from fastapi import Request, HTTPException
-    from fastapi.middleware.cors import CORSMiddleware
-    from fastapi.exceptions import RequestValidationError
-    from fastapi.responses import JSONResponse, StreamingResponse
-    from starlette.exceptions import HTTPException as starletteHTTPException
-    from api.services.mail import send_app_exception_to_admin
+def _error_body(request: Request, code: str, message: str, fields=None) -> dict:  # type: ignore[no-untyped-def]
+    return {
+        "error": {
+            "code": code,
+            "message": message,
+            "requestId": getattr(request.state, "request_id", None),
+            "fields": fields,
+        }
+    }
 
-    from api.services import socket
-    from api.utility.lifespan import LifeSpan
-    from api.configs.logging import logDebug, logInfo, logError
-    from api.views import user_router, auth_router, healthcheck_router
 
-    Setting = config
-    app = FastAPI(
-        title=Setting.APP_NAME,
-        lifespan=LifeSpan,
+def create_app(settings: Settings | None = None) -> FastAPI:
+    config = settings or get_settings()
+    logging.basicConfig(
+        level=getattr(logging, config.log_level.upper(), logging.INFO),
+        format="%(asctime)s %(levelname)s %(name)s %(message)s",
     )
-    app.include_router(auth_router, prefix="/api/v1/auth")
-    app.include_router(user_router, prefix="/api/v1/user")
-    app.include_router(healthcheck_router, prefix="/api/v1/healthcheck")
-
-    # ----PROMETHEUS------
-    from prometheus_fastapi_instrumentator import Instrumentator
-
-    Instrumentator().instrument(app, metric_namespace="api").expose(app, tags=["OTHER"])
-
-    # ----mount socket------
-    sm = socket.socketio.ASGIApp(socket.server, socketio_path="socket.io")
-    app.mount("/ws", sm)
-    app.sio = socket.server
-
-    # ------get request from any webpage---------
+    app = FastAPI(
+        title=config.app_name,
+        version="0.1.0",
+        description=DESCRIPTION,
+        openapi_tags=TAGS,
+        responses=COMMON_RESPONSES,
+        docs_url="/docs" if config.docs_enabled else None,
+        redoc_url="/redoc" if config.docs_enabled else None,
+        openapi_url="/openapi.json" if config.docs_enabled else None,
+    )
+    app.state.settings = config
+    app.add_middleware(RequestContextMiddleware)
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=["*"],
+        allow_origins=config.frontend_origins,
         allow_credentials=True,
-        allow_methods=["*"],
-        allow_headers=["*"],
+        allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+        allow_headers=["Authorization", "Content-Type", "X-Idempotency-Key", "X-Request-ID"],
     )
 
-    # --------add logger for each an every request--------
-    @app.middleware("http")
-    async def loggingRequest(request: Request, call_next):
+    for router in (
+        auth_router,
+        workspaces_router,
+        providers_router,
+        agents_router,
+        rooms_router,
+        health_router,
+    ):
+        app.include_router(router, prefix=config.api_v1_prefix)
 
-        do_not_log = False
-        if request.url.path not in [
-            "/api/v1/healthcheck/",
-            "/metrics",
-            "/ws/socket.io/",
-        ]:
-            do_not_log = True
-
-        if not do_not_log:
-            logDebug(
-                "-------------------------------------------------------------------------"
-            )
-            logInfo(f"{request.method}, {request.url}, {request.client.host}")
-        response: StreamingResponse = await call_next(request)
-
-        if not do_not_log:
-            logInfo(f"{response.status_code}")
-        return response
-
-    @app.exception_handler(werkexcept.HTTPException)
-    def handleWerkZeugException(req, exc):
-        logError(exc)
-        if exc.status_code == 500:
-            send_app_exception_to_admin(
-                error_message=exc,
-                error_type="Internal Server Error",
-            )
+    @app.exception_handler(DomainError)
+    async def domain_error(request: Request, exc: DomainError) -> JSONResponse:
         return JSONResponse(
-            content={
-                "status": -1,
-                "status_code": exc.code,
-                "message": f"{exc.description}",
-            },
-            status_code=exc.code,
-        )
-
-    @app.exception_handler(HTTPException)
-    def handleHTTPException(req, exc):
-        logError(exc)
-        if exc.status_code == 500:
-            send_app_exception_to_admin(
-                error_message=exc,
-                error_type="Internal Server Error",
-            )
-        return JSONResponse(
-            content={
-                "status": -1,
-                "status_code": exc.status_code,
-                "message": f"{exc.detail}",
-            },
             status_code=exc.status_code,
+            content=_error_body(request, exc.code, exc.message, exc.fields),
         )
 
     @app.exception_handler(RequestValidationError)
-    def handleValidationErrorException(req, exc):
-        logError(exc)
+    async def validation_error(request: Request, exc: RequestValidationError) -> JSONResponse:
+        fields: dict[str, list[str]] = {}
+        for error in exc.errors():
+            key = ".".join(str(item) for item in error["loc"] if item not in {"body", "query", "path"})
+            fields.setdefault(key or "request", []).append(error["msg"])
         return JSONResponse(
-            content={"status": -1, "status_code": 400, "message": f"{exc}"},
-            status_code=400,
+            status_code=422,
+            content=_error_body(request, "validation_error", "La requête contient des données invalides.", fields),
         )
 
-    @app.exception_handler(starletteHTTPException)
-    def handleStarletteException(req, exc):
-        logError(exc)
-        if exc.status_code == 500:
-            send_app_exception_to_admin(
-                error_message=exc,
-                error_type="Internal Server Error",
-            )
+    @app.exception_handler(HTTPException)
+    async def http_error(request: Request, exc: HTTPException) -> JSONResponse:
         return JSONResponse(
-            content={
-                "status": -1,
-                "status_code": exc.status_code,
-                "message": f"{exc.detail}",
-            },
             status_code=exc.status_code,
+            content=_error_body(request, "http_error", str(exc.detail)),
+            headers=exc.headers,
         )
 
-    @app.exception_handler(Exception)
-    def handleException(req, exc):
-        logError(exc)
-        send_app_exception_to_admin(
-            error_message=exc,
-            error_type="Internal Server Error",
+    if config.metrics_enabled:
+        Instrumentator(excluded_handlers=["/metrics"]).instrument(app).expose(
+            app, endpoint="/metrics", include_in_schema=False
         )
-        return JSONResponse(
-            content={"status": -1, "status_code": 500, "message": f"{exc}"},
-            status_code=500,
-        )
-
-    # ----------------init db------------------
-    from api.database import init_database, engine
-
-    init_database(engine)
     return app
+
+
+createApp = create_app

@@ -1,35 +1,73 @@
-from typing import Type
-from pydantic_settings import BaseSettings, PydanticBaseSettingsSource
+"""Configuration centralisee de l'API AI Agora."""
+
+from functools import lru_cache
+from typing import Literal
+
+from pydantic import Field, SecretStr, field_validator
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
-class SETTINGS(BaseSettings):
-    APP_NAME: str
-    ADMINS_EMAIL: str
-    SECRET_KEY: str
-    JWT_SECRET: str
-    ALGORITHM: str
-    DATABASE_URL: str
-    ACCESS_TOKEN_EXPIRE_MINUTES: int = 31536000
-    GOOGLE_API_KEY: str | None = None
-    SMS_SEND_ADDRESS: str | None = None
-    REDIS_DATABASE_URL: str | None = None
-    EMAIL_HOST: str | None = None
-    EMAIL_DOMAIN: str | None = None
-    EMAIL_PORT: str | None = None
-    EMAIL_USERNAME: str | None = None
-    EMAIL_PASSWORD: str | None = None
+class Settings(BaseSettings):
+    """Parametres valides au demarrage de l'application."""
 
+    model_config = SettingsConfigDict(
+        env_file=(".env", "../.env"),
+        env_file_encoding="utf-8",
+        case_sensitive=False,
+        extra="ignore",
+    )
+
+    app_name: str = "AI Agora API"
+    app_environment: Literal["development", "test", "production"] = "development"
+    app_debug: bool = False
+    api_v1_prefix: str = "/api/v1"
+    frontend_origins: list[str] = Field(default_factory=lambda: ["http://localhost:3000"])
+    database_url: str = "postgresql+psycopg://ai_agora:ai_agora@postgres:5432/ai_agora"
+    redis_url: str = "redis://redis:6379/0"
+    jwt_secret: SecretStr = SecretStr("change-this-development-secret")
+    jwt_algorithm: Literal["HS256", "HS384", "HS512"] = "HS256"
+    access_token_expire_minutes: int = 60
+    credential_encryption_key: SecretStr | None = None
+    docs_enabled: bool = True
+    metrics_enabled: bool = True
+    log_level: str = "INFO"
+    sse_poll_interval_seconds: float = 0.75
+    sse_heartbeat_seconds: float = 15.0
+    allow_private_provider_endpoints: bool = False
+
+    @field_validator("frontend_origins", mode="before")
     @classmethod
-    def settings_customise_sources(
-        cls,
-        settings_cls: Type[BaseSettings],
-        init_settings: PydanticBaseSettingsSource,
-        env_settings: PydanticBaseSettingsSource,
-        dotenv_settings: PydanticBaseSettingsSource,
-        file_secret_settings: PydanticBaseSettingsSource,
-    ) -> tuple[PydanticBaseSettingsSource, ...]:
-        return dotenv_settings, env_settings, file_secret_settings, init_settings
+    def split_origins(cls, value: object) -> object:
+        """Accepte aussi une liste separee par des virgules dans Docker."""
+
+        if isinstance(value, str) and not value.lstrip().startswith("["):
+            return [origin.strip() for origin in value.split(",") if origin.strip()]
+        return value
+
+    @field_validator("credential_encryption_key", mode="before")
+    @classmethod
+    def empty_encryption_key(cls, value: object) -> object:
+        """Traite une variable Docker vide comme une valeur absente."""
+
+        return None if value == "" else value
+
+    def validate_runtime(self) -> None:
+        """Verifie les invariants qui dependent de plusieurs variables."""
+
+        if self.app_environment == "production":
+            if self.jwt_secret.get_secret_value() == "change-this-development-secret":
+                raise ValueError("JWT_SECRET doit etre remplace en production")
+            if not self.credential_encryption_key:
+                raise ValueError("CREDENTIAL_ENCRYPTION_KEY est obligatoire en production")
+            if "*" in self.frontend_origins:
+                raise ValueError("Les origines CORS generiques sont interdites en production")
 
 
-# Settings for production
-Setting: SETTINGS | None = SETTINGS()
+@lru_cache
+def get_settings() -> Settings:
+    settings = Settings()
+    settings.validate_runtime()
+    return settings
+
+
+Setting = get_settings()

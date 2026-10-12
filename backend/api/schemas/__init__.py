@@ -1,5 +1,1 @@
-"""
-Ce package contient les schémas de validation des données de l'application.
-"""
-
-from .response import Response
+"""Contrats publics de l'API AI Agora."""

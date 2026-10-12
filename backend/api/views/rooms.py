@@ -1,0 +1,514 @@
+"""Cycle de vie des arènes, messages, réactions et flux d'événements."""
+
+import asyncio
+from collections import Counter
+from datetime import datetime, timezone
+from uuid import UUID
+
+from fastapi import APIRouter, Header, Query, Request, status
+from sqlalchemy import func, select
+from sqlalchemy.orm import selectinload
+from sqlalchemy.sql import Select
+from starlette.responses import StreamingResponse
+
+from api.configs import get_settings
+from api.database import SessionLocal
+from api.database.models import (
+    AgentDefinition,
+    ConversationEvent,
+    IdempotencyRecord,
+    Message,
+    MessageReaction,
+    Room,
+    RoomParticipant,
+    RoomStatus,
+)
+from api.dependencies import (
+    CurrentUser,
+    DbSession,
+    require_workspace_editor,
+    require_workspace_member,
+)
+from api.errors import ConflictError, DomainError, NotFoundError
+from api.schemas.common import Page
+from api.schemas.rooms import (
+    EventRead,
+    MessageCreate,
+    MessageRead,
+    ParticipantRead,
+    ParticipantUpdate,
+    ReactionRead,
+    ReactionUpdate,
+    RoomCreate,
+    RoomRead,
+    RoomStatusUpdate,
+)
+from api.services.audit import record_audit
+from api.services.events import append_room_event
+
+router = APIRouter(prefix="/workspaces/{workspace_id}/rooms", tags=["Arènes"])
+ALLOWED_REACTIONS = {"👍", "👎", "❤️", "🎯", "💡", "🤔"}
+
+
+def _room_query() -> Select[tuple[Room]]:
+    return select(Room).options(selectinload(Room.participants))
+
+
+def _room(db: DbSession, workspace_id: UUID, room_id: UUID) -> Room:
+    room = db.scalar(_room_query().where(Room.id == room_id, Room.workspace_id == workspace_id))
+    if not room:
+        raise NotFoundError("room_not_found", "L'arène demandée est introuvable.")
+    return room
+
+
+def _room_read(room: Room) -> RoomRead:
+    return RoomRead(
+        id=room.id,
+        workspace_id=room.workspace_id,
+        created_by_id=room.created_by_id,
+        name=room.name,
+        description=room.description,
+        topic=room.topic,
+        language=room.language,
+        mode=room.mode,
+        temporal_mode=room.temporal_mode,
+        visibility=room.visibility,
+        status=room.status,
+        rules=room.rules,
+        tools=room.tools,
+        budget_limit=room.budget_limit,
+        amount_spent=room.amount_spent,
+        max_messages=room.max_messages,
+        max_duration_minutes=room.max_duration_minutes,
+        cloud_tokens=room.cloud_tokens,
+        local_tokens=room.local_tokens,
+        version=room.version,
+        participants=[
+            ParticipantRead(
+                agent_id=item.agent_id,
+                instructions=item.instructions,
+                is_active=item.is_active,
+            )
+            for item in room.participants
+        ],
+        started_at=room.started_at,
+        stopped_at=room.stopped_at,
+        created_at=room.created_at,
+        updated_at=room.updated_at,
+    )
+
+
+def _event_read(event: ConversationEvent) -> EventRead:
+    return EventRead(
+        id=event.id,
+        room_id=event.room_id,
+        cursor=str(event.sequence),
+        occurred_at=event.created_at,
+        payload=event.payload,
+    )
+
+
+def _message_read(db: DbSession, message: Message, user_id: UUID) -> MessageRead:
+    rows = db.execute(
+        select(MessageReaction.emoji, MessageReaction.user_id).where(
+            MessageReaction.message_id == message.id
+        )
+    ).all()
+    counts = Counter(emoji for emoji, _ in rows)
+    mine = {emoji for emoji, reaction_user_id in rows if reaction_user_id == user_id}
+    return MessageRead(
+        id=message.id,
+        room_id=message.room_id,
+        author_user_id=message.author_user_id,
+        author_agent_id=message.author_agent_id,
+        reply_to_id=message.reply_to_id,
+        kind=message.kind,
+        content=message.content,
+        metadata=message.metadata_json,
+        reactions=[
+            ReactionRead(emoji=emoji, count=count, reacted_by_me=emoji in mine)
+            for emoji, count in sorted(counts.items())
+        ],
+        created_at=message.created_at,
+    )
+
+
+def _validate_agents(db: DbSession, workspace_id: UUID, agent_ids: list[UUID]) -> None:
+    found = set(
+        db.scalars(
+            select(AgentDefinition.id).where(
+                AgentDefinition.workspace_id == workspace_id,
+                AgentDefinition.id.in_(agent_ids),
+                AgentDefinition.is_active.is_(True),
+            )
+        ).all()
+    )
+    if found != set(agent_ids):
+        raise DomainError(
+            "invalid_participants",
+            "Chaque participant doit être un agent actif de cet espace.",
+            422,
+        )
+
+
+@router.get("", response_model=Page[RoomRead], summary="Lister les arènes")
+def list_rooms(workspace_id: UUID, db: DbSession, current_user: CurrentUser) -> Page[RoomRead]:
+    require_workspace_member(db, workspace_id, current_user)
+    rooms = db.scalars(
+        _room_query().where(Room.workspace_id == workspace_id).order_by(Room.created_at.desc())
+    ).all()
+    return Page(items=[_room_read(room) for room in rooms])
+
+
+@router.post(
+    "",
+    response_model=RoomRead,
+    status_code=status.HTTP_201_CREATED,
+    summary="Créer une arène idempotente",
+    description="Exige au moins deux agents actifs. Réutiliser X-Idempotency-Key renvoie la même arène.",
+)
+def create_room(
+    workspace_id: UUID,
+    payload: RoomCreate,
+    db: DbSession,
+    current_user: CurrentUser,
+    idempotency_key: str = Header(min_length=8, max_length=100, alias="X-Idempotency-Key"),
+) -> RoomRead:
+    require_workspace_editor(db, workspace_id, current_user)
+    existing = db.scalar(
+        select(IdempotencyRecord).where(
+            IdempotencyRecord.workspace_id == workspace_id,
+            IdempotencyRecord.scope == "room.create",
+            IdempotencyRecord.key == idempotency_key,
+        )
+    )
+    if existing:
+        return _room_read(_room(db, workspace_id, existing.resource_id))
+    _validate_agents(db, workspace_id, payload.participant_ids)
+    values = payload.model_dump(exclude={"participant_ids"})
+    room = Room(workspace_id=workspace_id, created_by_id=current_user.id, **values)
+    db.add(room)
+    db.flush()
+    for agent_id in payload.participant_ids:
+        db.add(RoomParticipant(room_id=room.id, agent_id=agent_id))
+    db.add(
+        IdempotencyRecord(
+            workspace_id=workspace_id,
+            scope="room.create",
+            key=idempotency_key,
+            resource_id=room.id,
+        )
+    )
+    append_room_event(
+        db,
+        room.id,
+        "room.created",
+        {"roomId": str(room.id)},
+        actor_user_id=current_user.id,
+        idempotency_key=idempotency_key,
+    )
+    record_audit(
+        db,
+        action="room.created",
+        resource_type="room",
+        resource_id=room.id,
+        actor_user_id=current_user.id,
+        workspace_id=workspace_id,
+        details={"participants": [str(item) for item in payload.participant_ids]},
+    )
+    db.commit()
+    return _room_read(_room(db, workspace_id, room.id))
+
+
+@router.get("/{room_id}", response_model=RoomRead, summary="Lire une arène")
+def get_room(workspace_id: UUID, room_id: UUID, db: DbSession, current_user: CurrentUser) -> RoomRead:
+    require_workspace_member(db, workspace_id, current_user)
+    return _room_read(_room(db, workspace_id, room_id))
+
+
+@router.patch(
+    "/{room_id}/status",
+    response_model=RoomRead,
+    summary="Démarrer, suspendre ou arrêter une arène",
+    description="Applique une machine à états et un contrôle de version afin d'éviter deux commandes concurrentes.",
+)
+def set_room_status(
+    workspace_id: UUID,
+    room_id: UUID,
+    payload: RoomStatusUpdate,
+    db: DbSession,
+    current_user: CurrentUser,
+) -> RoomRead:
+    require_workspace_editor(db, workspace_id, current_user)
+    room = _room(db, workspace_id, room_id)
+    if room.version != payload.expected_version:
+        raise ConflictError("stale_room_version", "L'arène a changé; rechargez-la avant de réessayer.")
+    transitions = {
+        RoomStatus.DRAFT: {RoomStatus.RUNNING, RoomStatus.STOPPED},
+        RoomStatus.RUNNING: {RoomStatus.PAUSED, RoomStatus.STOPPED},
+        RoomStatus.PAUSED: {RoomStatus.RUNNING, RoomStatus.STOPPED},
+        RoomStatus.STOPPED: set(),
+    }
+    target = RoomStatus(payload.status)
+    if target not in transitions[room.status]:
+        raise ConflictError("invalid_room_transition", f"Transition {room.status.value} → {target.value} interdite.")
+    active_count = sum(1 for item in room.participants if item.is_active)
+    if target == RoomStatus.RUNNING and active_count < 2:
+        raise ConflictError("not_enough_participants", "Deux agents actifs sont requis pour démarrer.")
+    room.status = target
+    room.version += 1
+    if target == RoomStatus.RUNNING and room.started_at is None:
+        room.started_at = datetime.now(timezone.utc)
+    if target == RoomStatus.STOPPED:
+        room.stopped_at = datetime.now(timezone.utc)
+    append_room_event(
+        db,
+        room.id,
+        f"room.{target.value}",
+        {"roomId": str(room.id), "version": room.version},
+        actor_user_id=current_user.id,
+    )
+    record_audit(
+        db,
+        action=f"room.{target.value}",
+        resource_type="room",
+        resource_id=room.id,
+        actor_user_id=current_user.id,
+        workspace_id=workspace_id,
+        details={"version": room.version},
+    )
+    db.commit()
+    return _room_read(_room(db, workspace_id, room.id))
+
+
+@router.put(
+    "/{room_id}/participants/{agent_id}",
+    response_model=RoomRead,
+    summary="Ajouter ou retirer logiquement un participant",
+)
+def set_participant(
+    workspace_id: UUID,
+    room_id: UUID,
+    agent_id: UUID,
+    payload: ParticipantUpdate,
+    db: DbSession,
+    current_user: CurrentUser,
+) -> RoomRead:
+    require_workspace_editor(db, workspace_id, current_user)
+    room = _room(db, workspace_id, room_id)
+    if room.status == RoomStatus.STOPPED:
+        raise ConflictError("room_stopped", "Une arène arrêtée ne peut plus être modifiée.")
+    if room.version != payload.expected_version:
+        raise ConflictError("stale_room_version", "L'arène a changé; rechargez-la avant de réessayer.")
+    _validate_agents(db, workspace_id, [agent_id])
+    participant = db.scalar(
+        select(RoomParticipant).where(
+            RoomParticipant.room_id == room.id,
+            RoomParticipant.agent_id == agent_id,
+        )
+    )
+    if not participant:
+        participant = RoomParticipant(room_id=room.id, agent_id=agent_id)
+        db.add(participant)
+    participant.is_active = payload.present
+    participant.instructions = payload.instructions
+    room.version += 1
+    event_type = "agent.joined" if payload.present else "agent.left"
+    append_room_event(
+        db,
+        room.id,
+        event_type,
+        {"agentId": str(agent_id)},
+        actor_user_id=current_user.id,
+    )
+    db.commit()
+    return _room_read(_room(db, workspace_id, room.id))
+
+
+@router.get("/{room_id}/messages", response_model=Page[MessageRead], summary="Lister les messages")
+def list_messages(
+    workspace_id: UUID,
+    room_id: UUID,
+    db: DbSession,
+    current_user: CurrentUser,
+    limit: int = Query(default=100, ge=1, le=500),
+) -> Page[MessageRead]:
+    require_workspace_member(db, workspace_id, current_user)
+    _room(db, workspace_id, room_id)
+    messages = db.scalars(
+        select(Message).where(Message.room_id == room_id).order_by(Message.created_at).limit(limit)
+    ).all()
+    return Page(items=[_message_read(db, message, current_user.id) for message in messages])
+
+
+@router.post(
+    "/{room_id}/messages",
+    response_model=MessageRead,
+    status_code=status.HTTP_201_CREATED,
+    summary="Publier un message idempotent",
+)
+def create_message(
+    workspace_id: UUID,
+    room_id: UUID,
+    payload: MessageCreate,
+    db: DbSession,
+    current_user: CurrentUser,
+    idempotency_key: str = Header(min_length=8, max_length=100, alias="X-Idempotency-Key"),
+) -> MessageRead:
+    require_workspace_editor(db, workspace_id, current_user)
+    room = _room(db, workspace_id, room_id)
+    existing = db.scalar(
+        select(Message).where(Message.room_id == room_id, Message.idempotency_key == idempotency_key)
+    )
+    if existing:
+        return _message_read(db, existing, current_user.id)
+    if room.status == RoomStatus.STOPPED:
+        raise ConflictError("room_stopped", "Aucun message ne peut être ajouté à une arène arrêtée.")
+    count = db.scalar(select(func.count(Message.id)).where(Message.room_id == room_id)) or 0
+    if count >= room.max_messages:
+        raise DomainError("message_budget_exhausted", "Le nombre maximal de messages est atteint.", 422)
+    if room.amount_spent >= room.budget_limit:
+        raise DomainError("cost_budget_exhausted", "Le budget financier de l'arène est épuisé.", 422)
+    if payload.reply_to_id:
+        reply = db.get(Message, payload.reply_to_id)
+        if not reply or reply.room_id != room.id:
+            raise DomainError("invalid_reply", "Le message cité n'appartient pas à cette arène.", 422)
+    message = Message(
+        room_id=room.id,
+        author_user_id=current_user.id,
+        reply_to_id=payload.reply_to_id,
+        content=payload.content,
+        idempotency_key=idempotency_key,
+    )
+    db.add(message)
+    db.flush()
+    append_room_event(
+        db,
+        room.id,
+        "message.created",
+        {"messageId": str(message.id)},
+        actor_user_id=current_user.id,
+        idempotency_key=idempotency_key,
+    )
+    db.commit()
+    db.refresh(message)
+    return _message_read(db, message, current_user.id)
+
+
+@router.put(
+    "/{room_id}/messages/{message_id}/reactions/{emoji}",
+    response_model=MessageRead,
+    summary="Ajouter ou retirer une réaction",
+)
+def set_reaction(
+    workspace_id: UUID,
+    room_id: UUID,
+    message_id: UUID,
+    emoji: str,
+    payload: ReactionUpdate,
+    db: DbSession,
+    current_user: CurrentUser,
+) -> MessageRead:
+    require_workspace_member(db, workspace_id, current_user)
+    _room(db, workspace_id, room_id)
+    if emoji not in ALLOWED_REACTIONS:
+        raise DomainError("unsupported_reaction", "Cette réaction n'est pas prise en charge.", 422)
+    message = db.get(Message, message_id)
+    if not message or message.room_id != room_id:
+        raise NotFoundError("message_not_found", "Le message demandé est introuvable.")
+    reaction = db.scalar(
+        select(MessageReaction).where(
+            MessageReaction.message_id == message_id,
+            MessageReaction.user_id == current_user.id,
+            MessageReaction.emoji == emoji,
+        )
+    )
+    if payload.present and not reaction:
+        db.add(MessageReaction(message_id=message_id, user_id=current_user.id, emoji=emoji))
+    elif not payload.present and reaction:
+        db.delete(reaction)
+    append_room_event(
+        db,
+        room_id,
+        "reaction.updated",
+        {"messageId": str(message_id), "emoji": emoji, "present": payload.present},
+        actor_user_id=current_user.id,
+    )
+    db.commit()
+    return _message_read(db, message, current_user.id)
+
+
+@router.get("/{room_id}/events", response_model=Page[EventRead], summary="Relire les événements ordonnés")
+def list_events(
+    workspace_id: UUID,
+    room_id: UUID,
+    db: DbSession,
+    current_user: CurrentUser,
+    cursor: int = Query(default=0, ge=0),
+    limit: int = Query(default=200, ge=1, le=500),
+) -> Page[EventRead]:
+    require_workspace_member(db, workspace_id, current_user)
+    _room(db, workspace_id, room_id)
+    events = db.scalars(
+        select(ConversationEvent)
+        .where(ConversationEvent.room_id == room_id, ConversationEvent.sequence > cursor)
+        .order_by(ConversationEvent.sequence)
+        .limit(limit + 1)
+    ).all()
+    has_more = len(events) > limit
+    selected = events[:limit]
+    return Page(
+        items=[_event_read(event) for event in selected],
+        next_cursor=str(selected[-1].sequence) if has_more and selected else None,
+    )
+
+
+@router.get(
+    "/{room_id}/stream",
+    response_class=StreamingResponse,
+    summary="Suivre les événements en Server-Sent Events",
+    description="Reprend après le curseur query ou l'en-tête Last-Event-ID. Un heartbeat conserve la connexion.",
+)
+async def stream_events(
+    workspace_id: UUID,
+    room_id: UUID,
+    request: Request,
+    db: DbSession,
+    current_user: CurrentUser,
+    cursor: int = Query(default=0, ge=0),
+) -> StreamingResponse:
+    require_workspace_member(db, workspace_id, current_user)
+    _room(db, workspace_id, room_id)
+    header_cursor = request.headers.get("Last-Event-ID")
+    start_cursor = int(header_cursor) if header_cursor and header_cursor.isdigit() else cursor
+    settings = get_settings()
+
+    async def generator():  # type: ignore[no-untyped-def]
+        last_sequence = start_cursor
+        last_heartbeat = asyncio.get_running_loop().time()
+        while not await request.is_disconnected():
+            with SessionLocal() as session:
+                events = session.scalars(
+                    select(ConversationEvent)
+                    .where(
+                        ConversationEvent.room_id == room_id,
+                        ConversationEvent.sequence > last_sequence,
+                    )
+                    .order_by(ConversationEvent.sequence)
+                    .limit(100)
+                ).all()
+                for event in events:
+                    body = _event_read(event).model_dump_json(by_alias=True)
+                    yield f"id: {event.sequence}\nevent: {event.event_type}\ndata: {body}\n\n"
+                    last_sequence = event.sequence
+            now = asyncio.get_running_loop().time()
+            if now - last_heartbeat >= settings.sse_heartbeat_seconds:
+                yield ": heartbeat\n\n"
+                last_heartbeat = now
+            await asyncio.sleep(settings.sse_poll_interval_seconds)
+
+    return StreamingResponse(
+        generator(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )

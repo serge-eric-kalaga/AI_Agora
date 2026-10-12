@@ -1,7 +1,17 @@
-"""
-Ce package contient les différentes routes de l'application.
-"""
+"""Routeurs HTTP de l'API v1."""
 
-from .auth.login import auth_router
-from .auth.user import user_router
-from .healthcheck import healthcheck_router
+from .agents import router as agents_router
+from .auth import router as auth_router
+from .health import router as health_router
+from .providers import router as providers_router
+from .rooms import router as rooms_router
+from .workspaces import router as workspaces_router
+
+__all__ = [
+    "agents_router",
+    "auth_router",
+    "health_router",
+    "providers_router",
+    "rooms_router",
+    "workspaces_router",
+]

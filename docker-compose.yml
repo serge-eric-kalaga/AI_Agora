@@ -1,82 +1,106 @@
+name: ai-agora
+
 services:
-
-  mysql:
-    image: mysql:latest
-    restart: always
-    # volumes:
-    #   - ./mysql/data:/var/lib/mysql
-    expose:
-      - 3306
-    networks:
-      - asgard
-      - monitor
-    healthcheck:
-      test: [ "CMD", "mysqladmin", "ping", "-h", "mysql" ]
-      interval: 5s
-      timeout: 30s
-      retries: 10
-    env_file:
-      - ./.env.dev
-
-  backend:
-    build: ./backend
-    restart: always
+  postgres:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-ai_agora}
+      POSTGRES_USER: ${POSTGRES_USER:-ai_agora}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-ai_agora_dev}
     volumes:
-      - ./backend/:/app/
-    expose:
-      - 80
-    ports:
-      - "8080:80"
-    depends_on:
-      mysql:
-        condition: service_healthy
-    networks:
-      - thor
-      - asgard
-      - loky
-      - monitor
-    env_file:
-      - ./.env.dev
-    logging:
-      driver: "json-file"
-      options:
-        max-size: "200k"
-        max-file: "10"
+      - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: curl -f http://localhost/api/v1/healthcheck/ || exit 1
-      interval: 5m30s
-      timeout: 30s
-      retries: 3
-      start_period: 30s
-
-  phpmyadmin:
-    image: phpmyadmin:latest
-    restart: always
-    ports:
-      - "8081:80"
-    links:
-      - mysql
-    depends_on:
-      mysql:
-        condition: service_healthy
-    networks:
-      - asgard
-    env_file:
-      - ./.env.dev
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-ai_agora} -d ${POSTGRES_DB:-ai_agora}"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+    networks: [data]
 
   redis:
-    image: redis:latest
-    restart: always
-    env_file:
-      - ./.env.dev
-    networks:
-      - loky
-    expose:
-      - 6379
+    image: redis:7.4-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+    networks: [data]
+
+  backend:
+    build:
+      context: ./backend
+    restart: unless-stopped
+    environment: &backend_environment
+      APP_ENVIRONMENT: development
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-ai_agora}:${POSTGRES_PASSWORD:-ai_agora_dev}@postgres:5432/${POSTGRES_DB:-ai_agora}
+      REDIS_URL: redis://redis:6379/0
+      JWT_SECRET: ${JWT_SECRET:-change-this-development-secret}
+      CREDENTIAL_ENCRYPTION_KEY: ${CREDENTIAL_ENCRYPTION_KEY:-}
+      FRONTEND_ORIGINS: ${FRONTEND_ORIGINS:-http://localhost:3000,http://127.0.0.1:3000}
+      ALLOW_PRIVATE_PROVIDER_ENDPOINTS: "true"
+      RUN_MIGRATIONS: "true"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    ports:
+      - "8000:8000"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/v1/health/ready', timeout=3)"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+    networks: [app, data]
+
+  worker:
+    build:
+      context: ./backend
+    restart: unless-stopped
+    command: ["celery", "-A", "api.celery_app:celery_app", "worker", "--loglevel=INFO"]
+    environment:
+      <<: *backend_environment
+      RUN_MIGRATIONS: "false"
+    depends_on:
+      backend:
+        condition: service_healthy
+    networks: [data]
+
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:8000/api/v1}
+    restart: unless-stopped
+    environment:
+      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:8000/api/v1}
+    depends_on:
+      backend:
+        condition: service_healthy
+    ports:
+      - "3000:3000"
+    networks: [app]
+
+  ollama:
+    image: ollama/ollama:latest
+    profiles: ["local-ai"]
+    restart: unless-stopped
+    volumes:
+      - ollama_data:/root/.ollama
+    ports:
+      - "11434:11434"
+    networks: [data]
 
 networks:
-  asgard:
-  thor:
-  loky:
-  monitor:
+  app:
+  data:
 
+volumes:
+  postgres_data:
+  redis_data:
+  ollama_data:

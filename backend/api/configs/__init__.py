@@ -1,5 +1,3 @@
-"""
-Ce package contient les configurations de l'application.
-"""
+from .config import Setting, Settings, get_settings
 
-from .config import SETTINGS, Setting
+__all__ = ["Setting", "Settings", "get_settings"]

@@ -1,36 +1,53 @@
-"""
-Ce package contient la logique de la base de données de l'application.
-"""
+"""Session SQLAlchemy et point d'import des modeles."""
 
-from api.configs.config import Setting
-from redis import Redis
-from sqlalchemy import create_engine, Engine
-from sqlalchemy.orm import Session
-from sqlalchemy_utils import create_database, database_exists
+from collections.abc import Generator
 
+from sqlalchemy import create_engine
+from sqlalchemy.engine import Engine
+from sqlalchemy.orm import Session, sessionmaker
+from sqlalchemy.pool import StaticPool
 
-engine = create_engine(Setting.DATABASE_URL)
+from api.configs import Setting
 
 
-redisDB: Redis | None = None
-if Setting.REDIS_DATABASE_URL:
-    redisDB = Redis.from_url(Setting.REDIS_DATABASE_URL, db=0)
+def create_database_engine(database_url: str) -> Engine:
+    """Construit un moteur adapte a PostgreSQL ou a SQLite pour les tests."""
+
+    options: dict[str, object] = {"pool_pre_ping": True}
+    if database_url.startswith("sqlite"):
+        options.update(connect_args={"check_same_thread": False}, poolclass=StaticPool)
+    return create_engine(database_url, **options)
 
 
-def get_db():
-    with Session(engine, autoflush=True) as session:
+engine = create_database_engine(Setting.database_url)
+SessionLocal = sessionmaker(bind=engine, autoflush=False, expire_on_commit=False)
+
+
+def get_db() -> Generator[Session, None, None]:
+    """Fournit une transaction courte a une route FastAPI."""
+
+    with SessionLocal() as session:
         yield session
 
 
-# -------------- Dans ce bloc sera importés tous les models
+from .models import (  # noqa: E402
+    AgentDefinition,
+    AuditLog,
+    Base,
+    ConversationEvent,
+    IdempotencyRecord,
+    Message,
+    MessageReaction,
+    ProviderConnection,
+    Room,
+    RoomParticipant,
+    User,
+    Workspace,
+    WorkspaceMember,
+)
 
-from .basetemplate import BaseTemplate
-from .models import User, Base
-# -------------------------------------------------
-
-
-def init_database(engine: Engine):
-    if not database_exists(engine.url):
-        create_database(engine.url)
-
-    Base.metadata.create_all(engine)
+__all__ = [
+    "AgentDefinition", "AuditLog", "Base", "ConversationEvent", "IdempotencyRecord",
+    "Message", "MessageReaction", "ProviderConnection", "Room", "RoomParticipant",
+    "SessionLocal", "User", "Workspace", "WorkspaceMember", "engine", "get_db",
+]
