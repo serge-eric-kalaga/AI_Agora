@@ -15,6 +15,9 @@ import type {
   AgoraState,
   AgoraUser,
   Provider,
+  Room,
+  RoomDraft,
+  Message,
   Workspace,
 } from '@/domain/models';
 import { LocalAgoraRepository } from '@/data/repository';
@@ -23,9 +26,16 @@ import {
   endSession,
   listWorkspaceData,
   listWorkspaces,
+  persistMessage,
+  persistParticipant,
+  persistReaction,
+  persistRoom,
+  persistRoomStatus,
   persistAgent,
   persistProvider,
   readSession,
+  readRoom,
+  subscribeRoom as subscribeRoomEvents,
 } from '@/data/http-api';
 import { seed } from '@/data/seed';
 import { t } from '@/i18n';
@@ -48,6 +58,13 @@ type Store = {
   selectWorkspace: (id: string) => Promise<void>;
   saveProvider: (provider: Provider, apiKey?: string) => Promise<Provider>;
   saveAgent: (draft: AgentDraft, existing?: Agent) => Promise<Agent>;
+  createRoom: (draft: RoomDraft, running: boolean) => Promise<Room>;
+  loadRoom: (roomId: string) => Promise<void>;
+  setRoomStatus: (room: Room, status: Room['status']) => Promise<Room>;
+  setParticipant: (room: Room, agentId: string, present: boolean) => Promise<Room>;
+  sendMessage: (roomId: string, content: string, replyToId?: string) => Promise<void>;
+  setReaction: (message: Message, emoji: string, present: boolean) => Promise<Message>;
+  subscribeRoom: (roomId: string) => () => void;
   storageWarning: string;
   toast: string;
   notify: (text: string) => void;
@@ -56,16 +73,18 @@ type Store = {
 type StoreAction =
   | Envelope
   | { hydrate: AgoraState }
-  | { remote: Pick<AgoraState, 'agents' | 'providers'> }
+  | { remote: Pick<AgoraState, 'agents' | 'providers' | 'rooms'> }
   | { agent: Agent }
-  | { provider: Provider };
+  | { provider: Provider }
+  | { room: Room }
+  | { roomData: { room: Room; messages: Message[] } }
+  | { message: Message };
 
 const Context = createContext<Store | null>(null);
 
 function reducer(state: AgoraState, action: StoreAction): AgoraState {
   if ('hydrate' in action) return action.hydrate;
-  if ('remote' in action)
-    return { ...state, ...action.remote, rooms: [], messages: [], events: [] };
+  if ('remote' in action) return { ...state, ...action.remote, messages: [], events: [] };
   if ('agent' in action) {
     const exists = state.agents.some((agent) => agent.id === action.agent.id);
     return {
@@ -84,6 +103,40 @@ function reducer(state: AgoraState, action: StoreAction): AgoraState {
             provider.id === action.provider.id ? action.provider : provider,
           )
         : [...state.providers, action.provider],
+    };
+  }
+  if ('roomData' in action) {
+    return {
+      ...state,
+      rooms: state.rooms.some((room) => room.id === action.roomData.room.id)
+        ? state.rooms.map((room) =>
+            room.id === action.roomData.room.id ? action.roomData.room : room,
+          )
+        : [action.roomData.room, ...state.rooms],
+      messages: [
+        ...state.messages.filter((message) => message.roomId !== action.roomData.room.id),
+        ...action.roomData.messages,
+      ],
+    };
+  }
+  if ('room' in action) {
+    const exists = state.rooms.some((room) => room.id === action.room.id);
+    return {
+      ...state,
+      rooms: exists
+        ? state.rooms.map((room) => (room.id === action.room.id ? action.room : room))
+        : [action.room, ...state.rooms],
+    };
+  }
+  if ('message' in action) {
+    const exists = state.messages.some((message) => message.id === action.message.id);
+    return {
+      ...state,
+      messages: exists
+        ? state.messages.map((message) =>
+            message.id === action.message.id ? action.message : message,
+          )
+        : [...state.messages, action.message],
     };
   }
   return transition(state, action);
@@ -105,7 +158,7 @@ export function AgoraProvider({ children }: { children: ReactNode }) {
     setWorkspaces(available);
     setActiveWorkspaceId(selected?.id ?? null);
     if (!selected) {
-      send({ remote: { agents: [], providers: [] } });
+      send({ remote: { agents: [], providers: [], rooms: [] } });
       return;
     }
     window.localStorage.setItem(workspaceStorageKey, selected.id);
@@ -170,7 +223,7 @@ export function AgoraProvider({ children }: { children: ReactNode }) {
     setUser(null);
     setWorkspaces([]);
     setActiveWorkspaceId(null);
-    send({ remote: { agents: [], providers: [] } });
+    send({ remote: { agents: [], providers: [], rooms: [] } });
   }
 
   async function selectWorkspace(id: string) {
@@ -208,6 +261,101 @@ export function AgoraProvider({ children }: { children: ReactNode }) {
     return saved;
   }
 
+  async function createRoom(draft: RoomDraft, running: boolean) {
+    if (demoMode) {
+      const now = new Date().toISOString();
+      const room: Room = {
+        ...draft,
+        id: crypto.randomUUID(),
+        status: running ? 'running' : 'paused',
+        createdAt: now,
+        startedAt: running ? now : null,
+        spent: 0,
+        tokens: 0,
+        localTokens: 0,
+        simulatedTurns: 0,
+        version: 1,
+      };
+      dispatch({ type: 'room.create', room });
+      return room;
+    }
+    if (!activeWorkspaceId) throw new Error(t.session.noWorkspace);
+    const room = await persistRoom(activeWorkspaceId, draft, running);
+    send({ room });
+    return room;
+  }
+
+  const loadRoom = useCallback(
+    async (roomId: string) => {
+      if (demoMode) return;
+      if (!activeWorkspaceId) throw new Error(t.session.noWorkspace);
+      send({ roomData: await readRoom(activeWorkspaceId, roomId) });
+    },
+    [activeWorkspaceId],
+  );
+
+  async function setRoomStatus(room: Room, status: Room['status']) {
+    if (demoMode) {
+      dispatch({ type: 'room.status', roomId: room.id, status });
+      return { ...room, status };
+    }
+    if (!activeWorkspaceId) throw new Error(t.session.noWorkspace);
+    const saved = await persistRoomStatus(activeWorkspaceId, room, status);
+    send({ room: saved });
+    return saved;
+  }
+
+  async function setParticipant(room: Room, agentId: string, present: boolean) {
+    if (demoMode) {
+      dispatch({ type: 'room.participant', roomId: room.id, agentId, add: present });
+      return room;
+    }
+    if (!activeWorkspaceId) throw new Error(t.session.noWorkspace);
+    const saved = await persistParticipant(activeWorkspaceId, room, agentId, present);
+    send({ room: saved });
+    return saved;
+  }
+
+  async function sendMessage(roomId: string, content: string, replyToId?: string) {
+    if (demoMode) {
+      dispatch({ type: 'message.send', roomId, text: content, replyTo: replyToId });
+      return;
+    }
+    if (!activeWorkspaceId) throw new Error(t.session.noWorkspace);
+    const message = await persistMessage(activeWorkspaceId, roomId, content, replyToId);
+    send({ message });
+  }
+
+  async function setReaction(message: Message, emoji: string, present: boolean) {
+    if (demoMode) {
+      dispatch({ type: 'message.react', messageId: message.id, emoji });
+      return message;
+    }
+    if (!activeWorkspaceId) throw new Error(t.session.noWorkspace);
+    const saved = await persistReaction(
+      activeWorkspaceId,
+      message.roomId,
+      message.id,
+      emoji,
+      present,
+    );
+    send({ message: saved });
+    return saved;
+  }
+
+  const subscribeRoom = useCallback(
+    (roomId: string) => {
+      if (demoMode || !activeWorkspaceId) return () => undefined;
+      const key = `ai-agora.room-cursor.${roomId}`;
+      const cursor = window.sessionStorage.getItem(key) ?? '0';
+      return subscribeRoomEvents(activeWorkspaceId, roomId, cursor, (nextCursor) => {
+        window.sessionStorage.setItem(key, nextCursor);
+        void readRoom(activeWorkspaceId, roomId).then((roomData) => send({ roomData }));
+      });
+    },
+    [activeWorkspaceId],
+  );
+
   return (
     <Context.Provider
       value={{
@@ -224,6 +372,13 @@ export function AgoraProvider({ children }: { children: ReactNode }) {
         selectWorkspace,
         saveProvider,
         saveAgent,
+        createRoom,
+        loadRoom,
+        setRoomStatus,
+        setParticipant,
+        sendMessage,
+        setReaction,
+        subscribeRoom,
         storageWarning,
         toast,
         notify,

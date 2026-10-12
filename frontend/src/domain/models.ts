@@ -54,7 +54,7 @@ export const roomSchema = z.object({
   visibility: z.enum(['private', 'shared']),
   rules: z.string(),
   tools: z.array(z.enum(toolIds)),
-  status: z.enum(['running', 'paused', 'stopped']),
+  status: z.enum(['draft', 'running', 'paused', 'stopped']),
   budget: z.number().positive(),
   spent: z.number().nonnegative(),
   maxMessages: z.number().positive(),
@@ -64,6 +64,7 @@ export const roomSchema = z.object({
   simulatedTurns: z.number().nonnegative(),
   createdAt: z.string(),
   startedAt: z.string().nullable(),
+  version: z.number().int().positive().default(1),
 });
 export const eventSchema = z.object({
   id: z.string(),
@@ -95,6 +96,7 @@ export type RoomDraft = Omit<
   | 'simulatedTurns'
   | 'createdAt'
   | 'startedAt'
+  | 'version'
 >;
 export type AgentDraft = Omit<Agent, 'id' | 'version'>;
 

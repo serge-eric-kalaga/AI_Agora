@@ -21,14 +21,17 @@ async function proxy(request: Request, context: { params: Promise<{ path: string
   const headers = new Headers();
   const contentType = request.headers.get('content-type');
   const idempotencyKey = request.headers.get('x-idempotency-key');
+  const lastEventId = request.headers.get('last-event-id');
   if (contentType) headers.set('content-type', contentType);
   if (idempotencyKey) headers.set('x-idempotency-key', idempotencyKey);
+  if (lastEventId) headers.set('last-event-id', lastEventId);
   const method = request.method;
   const body = method === 'GET' || method === 'HEAD' ? undefined : await request.arrayBuffer();
   const response = await backendFetch(`${path.join('/')}${source.search}`, {
     method,
     headers,
     body,
+    signal: request.signal,
   });
   return publicBackendResponse(response);
 }

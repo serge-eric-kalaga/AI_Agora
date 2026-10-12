@@ -1,5 +1,14 @@
 import { z } from 'zod';
-import type { Agent, AgentDraft, AgoraUser, Provider, Workspace } from '@/domain/models';
+import type {
+  Agent,
+  AgentDraft,
+  AgoraUser,
+  Message,
+  Provider,
+  Room,
+  RoomDraft,
+  Workspace,
+} from '@/domain/models';
 
 const userSchema = z.object({
   id: z.string(),
@@ -39,6 +48,46 @@ const agentReadSchema = z.object({
   generationConfig: z.record(z.string(), z.unknown()),
   isActive: z.boolean(),
   version: z.number().int().positive(),
+});
+const roomReadSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  description: z.string(),
+  topic: z.string(),
+  mode: z.enum(['debate', 'brainstorm', 'solve', 'free']),
+  temporalMode: z.enum(['live', 'background', 'permanent']),
+  visibility: z.enum(['private', 'shared', 'public']),
+  status: z.enum(['draft', 'running', 'paused', 'stopped']),
+  rules: z.string(),
+  tools: z.array(z.string()),
+  budgetLimit: z.coerce.number(),
+  amountSpent: z.coerce.number(),
+  maxMessages: z.number(),
+  maxDurationMinutes: z.number(),
+  cloudTokens: z.number(),
+  localTokens: z.number(),
+  version: z.number().int().positive(),
+  participants: z.array(
+    z.object({ agentId: z.string(), instructions: z.string(), isActive: z.boolean() }),
+  ),
+  startedAt: z.string().nullable(),
+  createdAt: z.string(),
+});
+const messageReadSchema = z.object({
+  id: z.string(),
+  roomId: z.string(),
+  authorAgentId: z.string().nullable(),
+  replyToId: z.string().nullable(),
+  kind: z.enum(['message', 'system']),
+  content: z.string(),
+  reactions: z.array(
+    z.object({
+      emoji: z.string(),
+      count: z.number().int().nonnegative(),
+      reactedByMe: z.boolean(),
+    }),
+  ),
+  createdAt: z.string(),
 });
 
 const palette = ['violet', 'cyan', 'amber', 'blue', 'pink', 'green'];
@@ -119,6 +168,54 @@ function mapAgent(value: z.infer<typeof agentReadSchema>): Agent {
   };
 }
 
+function mapRoom(value: z.infer<typeof roomReadSchema>): Room {
+  return {
+    id: value.id,
+    name: value.name,
+    description: value.description,
+    topic: value.topic,
+    mode: value.mode,
+    temporalMode: value.temporalMode,
+    visibility: value.visibility === 'public' ? 'shared' : value.visibility,
+    status: value.status,
+    rules: value.rules,
+    tools: value.tools.filter((tool): tool is Room['tools'][number] =>
+      ['web', 'files', 'code'].includes(tool),
+    ),
+    budget: value.budgetLimit,
+    spent: value.amountSpent,
+    maxMessages: value.maxMessages,
+    maxMinutes: value.maxDurationMinutes,
+    tokens: value.cloudTokens,
+    localTokens: value.localTokens,
+    simulatedTurns: 0,
+    agentIds: value.participants.filter((item) => item.isActive).map((item) => item.agentId),
+    createdAt: value.createdAt,
+    startedAt: value.startedAt,
+    version: value.version,
+  };
+}
+
+function mapMessage(value: z.infer<typeof messageReadSchema>): Message {
+  const reactions = Object.fromEntries(
+    value.reactions.map((reaction) => {
+      const actors = Array.from({ length: reaction.count }, (_, index) => `reaction-${index}`);
+      if (reaction.reactedByMe && actors.length) actors[0] = 'human';
+      return [reaction.emoji, actors];
+    }),
+  );
+  return {
+    id: value.id,
+    roomId: value.roomId,
+    agentId: value.authorAgentId,
+    kind: value.kind,
+    text: value.content,
+    createdAt: value.createdAt,
+    reactions,
+    ...(value.replyToId ? { replyTo: value.replyToId } : {}),
+  };
+}
+
 export async function readSession(): Promise<AgoraUser | null> {
   const response = await fetch('/api/session', { cache: 'no-store' });
   if (response.status === 401) return null;
@@ -149,14 +246,142 @@ export async function listWorkspaces(): Promise<Workspace[]> {
 }
 
 export async function listWorkspaceData(workspaceId: string) {
-  const [providers, agents] = await Promise.all([
+  const [providers, agents, rooms] = await Promise.all([
     request(`/api/backend/workspaces/${workspaceId}/providers`, pageOf(providerReadSchema)),
     request(`/api/backend/workspaces/${workspaceId}/agents`, pageOf(agentReadSchema)),
+    request(`/api/backend/workspaces/${workspaceId}/rooms`, pageOf(roomReadSchema)),
   ]);
   return {
     providers: providers.items.map(mapProvider),
     agents: agents.items.map(mapAgent),
+    rooms: rooms.items.map(mapRoom),
   };
+}
+
+export async function persistRoom(workspaceId: string, draft: RoomDraft, running: boolean) {
+  const created = await request(`/api/backend/workspaces/${workspaceId}/rooms`, roomReadSchema, {
+    method: 'POST',
+    headers: { 'x-idempotency-key': crypto.randomUUID() },
+    body: JSON.stringify({
+      name: draft.name,
+      description: draft.description,
+      topic: draft.topic,
+      language: 'fr',
+      mode: draft.mode,
+      temporalMode: draft.temporalMode,
+      visibility: draft.visibility,
+      rules: draft.rules,
+      tools: draft.tools,
+      budgetLimit: draft.budget,
+      maxMessages: draft.maxMessages,
+      maxDurationMinutes: draft.maxMinutes,
+      participantIds: draft.agentIds,
+    }),
+  });
+  if (!running) return mapRoom(created);
+  const started = await request(
+    `/api/backend/workspaces/${workspaceId}/rooms/${created.id}/status`,
+    roomReadSchema,
+    {
+      method: 'PATCH',
+      body: JSON.stringify({ status: 'running', expectedVersion: created.version }),
+    },
+  );
+  return mapRoom(started);
+}
+
+export async function readRoom(workspaceId: string, roomId: string) {
+  const [room, messages] = await Promise.all([
+    request(`/api/backend/workspaces/${workspaceId}/rooms/${roomId}`, roomReadSchema),
+    request(
+      `/api/backend/workspaces/${workspaceId}/rooms/${roomId}/messages`,
+      pageOf(messageReadSchema),
+    ),
+  ]);
+  return { room: mapRoom(room), messages: messages.items.map(mapMessage) };
+}
+
+export async function persistRoomStatus(workspaceId: string, room: Room, status: Room['status']) {
+  const result = await request(
+    `/api/backend/workspaces/${workspaceId}/rooms/${room.id}/status`,
+    roomReadSchema,
+    { method: 'PATCH', body: JSON.stringify({ status, expectedVersion: room.version }) },
+  );
+  return mapRoom(result);
+}
+
+export async function persistParticipant(
+  workspaceId: string,
+  room: Room,
+  agentId: string,
+  present: boolean,
+) {
+  const result = await request(
+    `/api/backend/workspaces/${workspaceId}/rooms/${room.id}/participants/${agentId}`,
+    roomReadSchema,
+    {
+      method: 'PUT',
+      body: JSON.stringify({ present, instructions: '', expectedVersion: room.version }),
+    },
+  );
+  return mapRoom(result);
+}
+
+export async function persistMessage(
+  workspaceId: string,
+  roomId: string,
+  content: string,
+  replyToId?: string,
+) {
+  const result = await request(
+    `/api/backend/workspaces/${workspaceId}/rooms/${roomId}/messages`,
+    messageReadSchema,
+    {
+      method: 'POST',
+      headers: { 'x-idempotency-key': crypto.randomUUID() },
+      body: JSON.stringify({ content, ...(replyToId ? { replyToId } : {}) }),
+    },
+  );
+  return mapMessage(result);
+}
+
+export async function persistReaction(
+  workspaceId: string,
+  roomId: string,
+  messageId: string,
+  emoji: string,
+  present: boolean,
+) {
+  const result = await request(
+    `/api/backend/workspaces/${workspaceId}/rooms/${roomId}/messages/${messageId}/reactions/${encodeURIComponent(emoji)}`,
+    messageReadSchema,
+    { method: 'PUT', body: JSON.stringify({ present }) },
+  );
+  return mapMessage(result);
+}
+
+export function subscribeRoom(
+  workspaceId: string,
+  roomId: string,
+  cursor: string,
+  onEvent: (cursor: string) => void,
+) {
+  const source = new EventSource(
+    `/api/backend/workspaces/${workspaceId}/rooms/${roomId}/stream?cursor=${encodeURIComponent(cursor)}`,
+  );
+  const eventTypes = [
+    'room.created',
+    'room.running',
+    'room.paused',
+    'room.stopped',
+    'agent.joined',
+    'agent.left',
+    'message.created',
+    'reaction.updated',
+  ];
+  const listener = (event: Event) => onEvent((event as MessageEvent).lastEventId || cursor);
+  eventTypes.forEach((type) => source.addEventListener(type, listener));
+  return () => source.close();
 }
 
 export async function persistProvider(

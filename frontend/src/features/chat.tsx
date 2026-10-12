@@ -31,7 +31,7 @@ import { effectiveTools } from '@/domain/engine';
 import { downloadJson } from '@/data/repository';
 import { t, formatMoney, formatNumber, formatTime } from '@/i18n';
 import type { Message, Room } from '@/domain/models';
-const emojis = ['👍', '❤️', '😂', '🤔'];
+const emojis = ['👍', '❤️', '🎯', '🤔'];
 export function Chat({ id }: { id: string }) {
   const { state } = useAgora();
   const room = state.rooms.find((r) => r.id === id);
@@ -51,40 +51,73 @@ export function Chat({ id }: { id: string }) {
   return <ChatRoom key={id} room={room} />;
 }
 function ChatRoom({ room }: { room: Room }) {
-  const { state, dispatch, notify } = useAgora();
+  const {
+    state,
+    dispatch,
+    mode,
+    loadRoom,
+    setRoomStatus,
+    setParticipant,
+    sendMessage,
+    setReaction,
+    subscribeRoom,
+    notify,
+  } = useAgora();
   const [text, setText] = useState(''),
     [replyTo, setReplyTo] = useState<Message | null>(null),
     [details, setDetails] = useState(false),
     [addOpen, setAddOpen] = useState(false),
-    [agentId, setAgentId] = useState('');
+    [agentId, setAgentId] = useState(''),
+    [submitting, setSubmitting] = useState(false);
   const end = useRef<HTMLDivElement>(null),
     composer = useRef<HTMLTextAreaElement>(null);
   const messages = state.messages.filter((m) => m.roomId === room.id);
   const participants = state.agents.filter((a) => room.agentIds.includes(a.id));
   const available = state.agents.filter((a) => a.active && !room.agentIds.includes(a.id));
   useEffect(() => {
-    if (room.status !== 'running') return;
+    if (mode !== 'demo' || room.status !== 'running') return;
     const timer = setInterval(() => {
       if (document.visibilityState === 'visible')
         dispatch({ type: 'room.simulate', roomId: room.id, selection: Math.random() });
     }, 7000);
     return () => clearInterval(timer);
-  }, [room.status, room.id, dispatch]);
+  }, [mode, room.status, room.id, dispatch]);
+  useEffect(() => {
+    if (mode === 'demo') return;
+    const unsubscribe = subscribeRoom(room.id);
+    void loadRoom(room.id).catch((cause) =>
+      notify(cause instanceof Error ? cause.message : t.shell.storageError),
+    );
+    return unsubscribe;
+  }, [loadRoom, mode, notify, room.id, subscribeRoom]);
   useEffect(() => {
     end.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
   }, [messages.length]);
-  function send(e?: FormEvent) {
+  async function send(e?: FormEvent) {
     e?.preventDefault();
-    if (!text.trim()) return;
-    dispatch({ type: 'message.send', roomId: room.id, text, replyTo: replyTo?.id });
-    setText('');
-    setReplyTo(null);
-    composer.current?.focus();
+    const content = text.trim();
+    if (!content || room.status !== 'running' || submitting) return;
+    setSubmitting(true);
+    try {
+      await sendMessage(room.id, content, replyTo?.id);
+      setText('');
+      setReplyTo(null);
+      composer.current?.focus();
+    } catch (cause) {
+      notify(cause instanceof Error ? cause.message : t.shell.storageError);
+    } finally {
+      setSubmitting(false);
+    }
+  }
+  function report(operation: Promise<unknown>) {
+    void operation.catch((cause) =>
+      notify(cause instanceof Error ? cause.message : t.shell.storageError),
+    );
   }
   function exportRoom() {
     downloadJson(`agora-${room.id}.json`, {
       schemaVersion: 1,
-      mode: 'demo',
+      mode,
       room,
       agents: participants,
       messages,
@@ -128,9 +161,7 @@ function ChatRoom({ room }: { room: Room }) {
                 className="icon-button"
                 aria-label={`${t.chat.remove} ${a.name}`}
                 title={t.chat.remove}
-                onClick={() =>
-                  dispatch({ type: 'room.participant', roomId: room.id, agentId: a.id, add: false })
-                }
+                onClick={() => report(setParticipant(room, a.id, false))}
               >
                 <UserRoundMinus size={14} />
               </button>
@@ -188,16 +219,18 @@ function ChatRoom({ room }: { room: Room }) {
           </div>
         ))}
       </div>
-      <button
-        className="button secondary full-width"
-        onClick={() => {
-          dispatch({ type: 'room.summary', roomId: room.id });
-          notify(t.chat.summaryHint);
-        }}
-      >
-        <Sparkles size={15} />
-        {t.chat.summary}
-      </button>
+      {mode === 'demo' && (
+        <button
+          className="button secondary full-width"
+          onClick={() => {
+            dispatch({ type: 'room.summary', roomId: room.id });
+            notify(t.chat.summaryHint);
+          }}
+        >
+          <Sparkles size={15} />
+          {t.chat.summary}
+        </button>
+      )}
     </>
   );
   return (
@@ -231,7 +264,7 @@ function ChatRoom({ room }: { room: Room }) {
         </div>
         <div className="room-sidebar-foot">
           <FlaskIcon />
-          <span>{t.demoDetail}</span>
+          <span>{mode === 'demo' ? t.demoDetail : t.chat.connectedHint}</span>
         </div>
       </aside>
       <section className="conversation">
@@ -254,7 +287,7 @@ function ChatRoom({ room }: { room: Room }) {
         <div className="conversation-toolbar">
           <span className="demo-label">
             <span className="status-dot" />
-            {t.chat.demo}
+            {mode === 'demo' ? t.chat.demo : t.chat.connected}
           </span>
           <div className="button-group">
             {room.status !== 'stopped' && (
@@ -262,11 +295,7 @@ function ChatRoom({ room }: { room: Room }) {
                 <button
                   className="button secondary small"
                   onClick={() =>
-                    dispatch({
-                      type: 'room.status',
-                      roomId: room.id,
-                      status: room.status === 'running' ? 'paused' : 'running',
-                    })
+                    report(setRoomStatus(room, room.status === 'running' ? 'paused' : 'running'))
                   }
                 >
                   {room.status === 'running' ? <Pause size={14} /> : <Play size={14} />}
@@ -276,9 +305,7 @@ function ChatRoom({ room }: { room: Room }) {
                   className="icon-button"
                   aria-label={t.chat.stop}
                   title={t.chat.stop}
-                  onClick={() =>
-                    dispatch({ type: 'room.status', roomId: room.id, status: 'stopped' })
-                  }
+                  onClick={() => report(setRoomStatus(room, 'stopped'))}
                 >
                   <Square size={14} />
                 </button>
@@ -300,7 +327,7 @@ function ChatRoom({ room }: { room: Room }) {
               <MessagesSquare size={24} />
             </span>
             <h2>{room.name}</h2>
-            <p>{t.chat.demo}</p>
+            <p>{mode === 'demo' ? t.chat.demo : t.chat.connectedHint}</p>
             <span className="date-divider">
               {new Date(room.createdAt).toLocaleDateString(t.locale, {
                 day: 'numeric',
@@ -378,7 +405,13 @@ function ChatRoom({ room }: { room: Room }) {
                           aria-label={`${t.chat.react} ${emoji}`}
                           aria-pressed={message.reactions[emoji]?.includes('human') ?? false}
                           onClick={() =>
-                            dispatch({ type: 'message.react', messageId: message.id, emoji })
+                            report(
+                              setReaction(
+                                message,
+                                emoji,
+                                !message.reactions[emoji]?.includes('human'),
+                              ),
+                            )
                           }
                         >
                           {emoji}
@@ -394,7 +427,7 @@ function ChatRoom({ room }: { room: Room }) {
           <div ref={end} />
         </div>
         <div className="composer-area">
-          {room.status === 'running' && (
+          {mode === 'demo' && room.status === 'running' && (
             <div className="simulation-running">
               <span className="status-dot text-green" />
               {t.common.simulated}
@@ -428,7 +461,7 @@ function ChatRoom({ room }: { room: Room }) {
               </button>
             </div>
           )}
-          <form onSubmit={send} className="composer">
+          <form onSubmit={(event) => void send(event)} className="composer">
             <textarea
               ref={composer}
               value={text}
@@ -437,10 +470,11 @@ function ChatRoom({ room }: { room: Room }) {
               placeholder={t.chat.placeholder}
               aria-label={t.chat.placeholder}
               rows={2}
+              disabled={room.status !== 'running' || submitting}
               onKeyDown={(e) => {
                 if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
                   e.preventDefault();
-                  send();
+                  void send();
                 }
               }}
             />
@@ -467,7 +501,7 @@ function ChatRoom({ room }: { room: Room }) {
               <button
                 type="submit"
                 className="button primary send-button"
-                disabled={!text.trim()}
+                disabled={!text.trim() || room.status !== 'running' || submitting}
                 aria-label={t.chat.send}
               >
                 <Send size={17} />
@@ -476,7 +510,7 @@ function ChatRoom({ room }: { room: Room }) {
           </form>
           <div className="composer-foot">
             <ShieldCheck size={11} />
-            {t.demoDetail}
+            {mode === 'demo' ? t.demoDetail : t.chat.connectedHint}
           </div>
         </div>
       </section>
@@ -503,9 +537,12 @@ function ChatRoom({ room }: { room: Room }) {
                 className="button primary"
                 disabled={!agentId}
                 onClick={() => {
-                  dispatch({ type: 'room.participant', roomId: room.id, agentId, add: true });
-                  setAddOpen(false);
-                  setAgentId('');
+                  report(
+                    setParticipant(room, agentId, true).then(() => {
+                      setAddOpen(false);
+                      setAgentId('');
+                    }),
+                  );
                 }}
               >
                 <Plus size={16} />

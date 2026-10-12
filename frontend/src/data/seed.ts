@@ -98,6 +98,7 @@ const roomBase = {
   simulatedTurns: 3,
   createdAt,
   startedAt: null,
+  version: 1,
 };
 const rooms: Room[] = [
   {

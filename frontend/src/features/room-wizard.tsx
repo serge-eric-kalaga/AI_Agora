@@ -27,10 +27,11 @@ import { formatMoney, t } from '@/i18n';
 import type { RoomDraft } from '@/domain/models';
 const stepIcons = [MessageSquarePlus, Users, Shield, Timer, LockKeyhole, Coins];
 export function RoomWizard() {
-  const { state, dispatch, notify } = useAgora();
+  const { state, createRoom, mode, notify } = useAgora();
   const router = useRouter();
   const [step, setStep] = useState(0),
-    [error, setError] = useState('');
+    [error, setError] = useState(''),
+    [saving, setSaving] = useState(false);
   const [draft, setDraft] = useState<RoomDraft>({
     name: '',
     description: '',
@@ -67,7 +68,7 @@ export function RoomWizard() {
     setError(issue);
     if (!issue) setStep(step + 1);
   }
-  function launch(running: boolean) {
+  async function launch(running: boolean) {
     for (const index of [0, 1, 5]) {
       const issue = validate(index);
       if (issue) {
@@ -76,26 +77,19 @@ export function RoomWizard() {
         return;
       }
     }
-    const id = crypto.randomUUID(),
-      now = new Date().toISOString();
-    dispatch({
-      type: 'room.create',
-      room: {
-        ...draft,
-        name: draft.name.trim(),
-        topic: draft.topic.trim(),
-        id,
-        status: running ? 'running' : 'paused',
-        createdAt: now,
-        startedAt: running ? now : null,
-        spent: 0,
-        tokens: 0,
-        localTokens: 0,
-        simulatedTurns: 0,
-      },
-    });
-    notify(t.rooms.created);
-    router.push(`/fr/rooms/${id}`);
+    setSaving(true);
+    try {
+      const room = await createRoom(
+        { ...draft, name: draft.name.trim(), topic: draft.topic.trim() },
+        running,
+      );
+      notify(t.rooms.created);
+      router.push(`/fr/rooms/${room.id}`);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : t.shell.storageError);
+    } finally {
+      setSaving(false);
+    }
   }
   return (
     <div className="page wizard-page">
@@ -360,8 +354,8 @@ export function RoomWizard() {
                 {t.rooms.limitsHint}
               </div>
               <div className="demo-disclosure">
-                <Badge tone="cyan">{t.demo}</Badge>
-                <p>{t.demoDetail}</p>
+                <Badge tone="cyan">{mode === 'demo' ? t.demo : t.chat.connected}</Badge>
+                <p>{mode === 'demo' ? t.demoDetail : t.chat.connectedHint}</p>
               </div>
             </>
           )}
@@ -385,13 +379,21 @@ export function RoomWizard() {
               </button>
             ) : (
               <div className="button-group">
-                <button className="button secondary" onClick={() => launch(false)}>
+                <button
+                  className="button secondary"
+                  disabled={saving}
+                  onClick={() => void launch(false)}
+                >
                   <Pause size={15} />
-                  {t.rooms.savePaused}
+                  {saving ? t.common.saving : t.rooms.savePaused}
                 </button>
-                <button className="button primary" onClick={() => launch(true)}>
+                <button
+                  className="button primary"
+                  disabled={saving}
+                  onClick={() => void launch(true)}
+                >
                   <Rocket size={16} />
-                  {t.rooms.launch}
+                  {saving ? t.common.saving : t.rooms.launch}
                 </button>
               </div>
             )}
