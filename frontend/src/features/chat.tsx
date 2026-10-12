@@ -1,5 +1,5 @@
 'use client';
-import { useEffect, useRef, useState, type FormEvent } from 'react';
+import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react';
 import Link from 'next/link';
 import Markdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -28,6 +28,7 @@ import {
   FileText,
 } from 'lucide-react';
 import { useAgora } from '@/components/store';
+import { usePersistentBoolean } from '@/components/persistent-state';
 import { Avatar, Badge, Empty, Modal, Progress, Status } from '@/components/ui';
 import { ToolChips } from './agents';
 import { effectiveTools } from '@/domain/engine';
@@ -35,6 +36,59 @@ import { downloadJson } from '@/data/repository';
 import { t, formatMoney, formatTime } from '@/i18n';
 import type { Message, Room } from '@/domain/models';
 const emojis = ['👍', '❤️', '🎯', '🤔'];
+const scrollStoragePrefix = 'ai-agora.chat-scroll';
+
+type SavedScrollPosition = {
+  messageId: string;
+  offset: number;
+  atBottom: boolean;
+  followsLatest: boolean;
+};
+
+function readScrollPosition(roomId: string): SavedScrollPosition | null {
+  try {
+    const raw = window.sessionStorage.getItem(`${scrollStoragePrefix}:${roomId}`);
+    if (!raw) return null;
+    const saved = JSON.parse(raw) as Partial<SavedScrollPosition>;
+    if (
+      typeof saved.messageId !== 'string' ||
+      typeof saved.offset !== 'number' ||
+      typeof saved.atBottom !== 'boolean' ||
+      typeof saved.followsLatest !== 'boolean'
+    )
+      return null;
+    return saved as SavedScrollPosition;
+  } catch {
+    return null;
+  }
+}
+
+function saveScrollPosition(roomId: string, list: HTMLDivElement) {
+  const distanceFromBottom = list.scrollHeight - list.scrollTop - list.clientHeight;
+  const listTop = list.getBoundingClientRect().top;
+  const anchor = [...list.querySelectorAll<HTMLElement>('[id^="message-"]')].find(
+    (element) => element.getBoundingClientRect().bottom > listTop + 1,
+  );
+  if (!anchor) return;
+  const saved: SavedScrollPosition = {
+    messageId: anchor.id.slice('message-'.length),
+    offset: anchor.getBoundingClientRect().top - listTop,
+    atBottom: distanceFromBottom <= 4,
+    followsLatest: distanceFromBottom < 120,
+  };
+  try {
+    window.sessionStorage.setItem(`${scrollStoragePrefix}:${roomId}`, JSON.stringify(saved));
+  } catch {
+    // La conversation continue de fonctionner si le stockage du navigateur est indisponible.
+  }
+}
+
+function afterRender() {
+  return new Promise<void>((resolve) =>
+    requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
+  );
+}
+
 export function Chat({ id }: { id: string }) {
   const { state } = useAgora();
   const room = state.rooms.find((r) => r.id === id);
@@ -75,7 +129,10 @@ function ChatRoom({ room }: { room: Room }) {
     [loadingOlder, setLoadingOlder] = useState(false),
     [showScrollToBottom, setShowScrollToBottom] = useState(false),
     [highlightedMessageId, setHighlightedMessageId] = useState<string | null>(null),
-    [inspectorOpen, setInspectorOpen] = useState(true),
+    [inspectorOpen, setInspectorOpen] = usePersistentBoolean(
+      'ai-agora.ui.room-inspector-open',
+      true,
+    ),
     [details, setDetails] = useState(false),
     [addOpen, setAddOpen] = useState(false),
     [agentId, setAgentId] = useState(''),
@@ -83,8 +140,10 @@ function ChatRoom({ room }: { room: Room }) {
   const end = useRef<HTMLDivElement>(null),
     messageList = useRef<HTMLDivElement>(null),
     followsLatest = useRef(true),
+    restoringScroll = useRef(mode !== 'demo'),
     olderCursor = useRef<string | null>(null),
     loadingOlderRef = useRef(false),
+    saveScrollFrame = useRef<number | null>(null),
     highlightTimer = useRef<ReturnType<typeof setTimeout> | null>(null),
     composer = useRef<HTMLTextAreaElement>(null);
   const messages = state.messages.filter((m) => m.roomId === room.id);
@@ -97,6 +156,35 @@ function ChatRoom({ room }: { room: Room }) {
       )
     : [];
   const available = state.agents.filter((a) => a.active && !room.agentIds.includes(a.id));
+  const fetchOlderMessages = useCallback(
+    async (preservePosition: boolean) => {
+      const cursor = olderCursor.current;
+      if (!cursor || loadingOlderRef.current) return null;
+      const list = messageList.current;
+      const previousHeight = list?.scrollHeight ?? 0;
+      loadingOlderRef.current = true;
+      setLoadingOlder(true);
+      try {
+        const page = await loadOlderMessages(room.id, cursor);
+        olderCursor.current = page.nextCursor;
+        if (preservePosition && list) {
+          requestAnimationFrame(() =>
+            requestAnimationFrame(() => {
+              list.scrollTop += list.scrollHeight - previousHeight;
+            }),
+          );
+        }
+        return page;
+      } catch (cause) {
+        notify(cause instanceof Error ? cause.message : t.shell.storageError);
+        return null;
+      } finally {
+        loadingOlderRef.current = false;
+        setLoadingOlder(false);
+      }
+    },
+    [loadOlderMessages, notify, room.id],
+  );
   useEffect(() => {
     if (mode !== 'demo' || room.status !== 'running') return;
     const timer = setInterval(() => {
@@ -107,6 +195,10 @@ function ChatRoom({ room }: { room: Room }) {
   }, [mode, room.status, room.id, dispatch]);
   useEffect(() => {
     if (mode === 'demo') return;
+    let cancelled = false;
+    const savedPosition = readScrollPosition(room.id);
+    restoringScroll.current = true;
+    followsLatest.current = savedPosition?.followsLatest ?? true;
     const unsubscribe = subscribeRoom(room.id, (id, typing) => {
       setTypingAgentIds((current) =>
         typing
@@ -117,12 +209,46 @@ function ChatRoom({ room }: { room: Room }) {
       );
     });
     void loadRoom(room.id)
-      .then((page) => {
+      .then(async (page) => {
         olderCursor.current = page.nextCursor;
+        await afterRender();
+        const list = messageList.current;
+        if (!list || cancelled) {
+          if (!cancelled) restoringScroll.current = false;
+          return;
+        }
+        if (savedPosition && !savedPosition.atBottom) {
+          let target = document.getElementById(`message-${savedPosition.messageId}`);
+          while (!target && olderCursor.current && !cancelled) {
+            const olderPage = await fetchOlderMessages(false);
+            if (!olderPage) break;
+            await afterRender();
+            target = document.getElementById(`message-${savedPosition.messageId}`);
+          }
+          if (target) {
+            const currentOffset =
+              target.getBoundingClientRect().top - list.getBoundingClientRect().top;
+            list.scrollTop += currentOffset - savedPosition.offset;
+          } else {
+            list.scrollTop = list.scrollHeight;
+            followsLatest.current = true;
+          }
+        } else {
+          list.scrollTop = list.scrollHeight;
+        }
+        restoringScroll.current = false;
+        setShowScrollToBottom(!followsLatest.current);
+        saveScrollPosition(room.id, list);
       })
-      .catch((cause) => notify(cause instanceof Error ? cause.message : t.shell.storageError));
-    return unsubscribe;
-  }, [loadRoom, mode, notify, room.id, subscribeRoom]);
+      .catch((cause) => {
+        restoringScroll.current = false;
+        notify(cause instanceof Error ? cause.message : t.shell.storageError);
+      });
+    return () => {
+      cancelled = true;
+      unsubscribe();
+    };
+  }, [fetchOlderMessages, loadRoom, mode, notify, room.id, subscribeRoom]);
   useEffect(
     () => () => {
       if (highlightTimer.current) clearTimeout(highlightTimer.current);
@@ -130,35 +256,20 @@ function ChatRoom({ room }: { room: Room }) {
     [],
   );
   useEffect(() => {
-    if (followsLatest.current)
+    if (!restoringScroll.current && followsLatest.current)
       end.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
   }, [messages.length]);
-  async function fetchOlderMessages(preservePosition: boolean) {
-    const cursor = olderCursor.current;
-    if (!cursor || loadingOlderRef.current) return null;
-    const list = messageList.current;
-    const previousHeight = list?.scrollHeight ?? 0;
-    loadingOlderRef.current = true;
-    setLoadingOlder(true);
-    try {
-      const page = await loadOlderMessages(room.id, cursor);
-      olderCursor.current = page.nextCursor;
-      if (preservePosition && list) {
-        requestAnimationFrame(() =>
-          requestAnimationFrame(() => {
-            list.scrollTop += list.scrollHeight - previousHeight;
-          }),
-        );
-      }
-      return page;
-    } catch (cause) {
-      notify(cause instanceof Error ? cause.message : t.shell.storageError);
-      return null;
-    } finally {
-      loadingOlderRef.current = false;
-      setLoadingOlder(false);
-    }
-  }
+  useEffect(() => {
+    const saveBeforeLeaving = () => {
+      const list = messageList.current;
+      if (list && !restoringScroll.current) saveScrollPosition(room.id, list);
+    };
+    window.addEventListener('pagehide', saveBeforeLeaving);
+    return () => {
+      window.removeEventListener('pagehide', saveBeforeLeaving);
+      if (saveScrollFrame.current !== null) cancelAnimationFrame(saveScrollFrame.current);
+    };
+  }, [room.id]);
   async function jumpToMessage(messageId: string) {
     let target = document.getElementById(`message-${messageId}`);
     let attempts = 0;
@@ -393,7 +504,7 @@ function ChatRoom({ room }: { room: Room }) {
             aria-label={inspectorOpen ? t.chat.hideInspector : t.chat.showInspector}
             title={inspectorOpen ? t.chat.hideInspector : t.chat.showInspector}
             aria-expanded={inspectorOpen}
-            onClick={() => setInspectorOpen((open) => !open)}
+            onClick={() => setInspectorOpen(!inspectorOpen)}
           >
             {inspectorOpen ? <PanelRightClose size={19} /> : <PanelRightOpen size={19} />}
           </button>
@@ -441,10 +552,17 @@ function ChatRoom({ room }: { room: Room }) {
           ref={messageList}
           onScroll={() => {
             const list = messageList.current;
-            if (!list) return;
+            if (!list || restoringScroll.current) return;
             const nearBottom = list.scrollHeight - list.scrollTop - list.clientHeight < 120;
             followsLatest.current = nearBottom;
             setShowScrollToBottom(!nearBottom);
+            if (saveScrollFrame.current === null) {
+              saveScrollFrame.current = requestAnimationFrame(() => {
+                saveScrollFrame.current = null;
+                const currentList = messageList.current;
+                if (currentList) saveScrollPosition(room.id, currentList);
+              });
+            }
             if (!nearBottom && list.scrollTop < 160) void fetchOlderMessages(true);
           }}
         >

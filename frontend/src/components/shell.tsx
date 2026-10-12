@@ -27,6 +27,7 @@ import {
   LogOut,
 } from 'lucide-react';
 import { useAgora } from './store';
+import { usePersistentBoolean } from './persistent-state';
 import { Avatar, Badge, Empty, Modal, Progress } from './ui';
 import { formatMoney, formatTime, t } from '@/i18n';
 const navigation = [
@@ -54,7 +55,7 @@ export function Shell({ children }: { children: ReactNode }) {
     storageWarning,
     toast,
   } = useAgora();
-  const [collapsed, setCollapsed] = useState(false),
+  const [collapsed, setCollapsed] = usePersistentBoolean('ai-agora.ui.sidebar-collapsed', false),
     [mobile, setMobile] = useState(false),
     [searchOpen, setSearchOpen] = useState(false),
     [query, setQuery] = useState(''),
