@@ -77,7 +77,7 @@ const agents: Agent[] = [
       active: true,
       systemPrompt: `Tu es ${a.name}, ${a.role.toLowerCase()}. ${a.description} Distingue les faits des hypothèses et respecte les participants.`,
       temperature: 0.7,
-      maxTokens: 1024,
+      maxTokens: 1200,
       version: 1,
     }) as Agent,
 );
@@ -91,7 +91,7 @@ const roomBase = {
   tools: ['web', 'files'] as Room['tools'],
   budget: 5,
   spent: 0.12,
-  maxMessages: 30,
+  maxMessages: null,
   maxMinutes: 60,
   tokens: 2400,
   localTokens: 800,

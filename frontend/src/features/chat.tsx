@@ -67,6 +67,7 @@ function ChatRoom({ room }: { room: Room }) {
     [replyTo, setReplyTo] = useState<Message | null>(null),
     [mention, setMention] = useState<{ start: number; end: number; query: string } | null>(null),
     [activeMention, setActiveMention] = useState(0),
+    [typingAgentIds, setTypingAgentIds] = useState<string[]>([]),
     [details, setDetails] = useState(false),
     [addOpen, setAddOpen] = useState(false),
     [agentId, setAgentId] = useState(''),
@@ -93,7 +94,15 @@ function ChatRoom({ room }: { room: Room }) {
   }, [mode, room.status, room.id, dispatch]);
   useEffect(() => {
     if (mode === 'demo') return;
-    const unsubscribe = subscribeRoom(room.id);
+    const unsubscribe = subscribeRoom(room.id, (id, typing) => {
+      setTypingAgentIds((current) =>
+        typing
+          ? current.includes(id)
+            ? current
+            : [...current, id]
+          : current.filter((agentId) => agentId !== id),
+      );
+    });
     void loadRoom(room.id).catch((cause) =>
       notify(cause instanceof Error ? cause.message : t.shell.storageError),
     );
@@ -210,9 +219,7 @@ function ChatRoom({ room }: { room: Room }) {
         <dl>
           <div>
             <dt>{t.chat.turns}</dt>
-            <dd>
-              {messages.filter((message) => message.agentId).length} / {room.maxMessages}
-            </dd>
+            <dd>{messages.filter((message) => message.agentId).length}</dd>
           </div>
           <div>
             <dt>{t.rooms.maxMinutes}</dt>
@@ -444,6 +451,22 @@ function ChatRoom({ room }: { room: Room }) {
           <div ref={end} />
         </div>
         <div className="composer-area">
+          {typingAgentIds.length > 0 && (
+            <div className="typing-indicator" role="status" aria-live="polite">
+              <span className="typing-dots" aria-hidden="true">
+                <i />
+                <i />
+                <i />
+              </span>
+              {t.chat.typing.replace(
+                '{names}',
+                typingAgentIds
+                  .map((id) => state.agents.find((agent) => agent.id === id)?.name)
+                  .filter(Boolean)
+                  .join(', '),
+              )}
+            </div>
+          )}
           {mode === 'demo' && room.status === 'running' && (
             <div className="simulation-running">
               <span className="status-dot text-green" />

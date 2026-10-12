@@ -219,8 +219,7 @@ export function transition(state: AgoraState, env: Envelope): AgoraState {
   if (c.type === 'room.simulate') {
     if (room.status !== 'running') return state;
     const minutes = room.startedAt ? (Date.parse(env.now) - Date.parse(room.startedAt)) / 60000 : 0;
-    if (room.simulatedTurns >= room.maxMessages || minutes >= room.maxMinutes)
-      return stopAtLimit(state, env, room, t.chat.limitEvent);
+    if (minutes >= room.maxMinutes) return stopAtLimit(state, env, room, t.chat.limitEvent);
     if (room.spent >= room.budget) return stopAtLimit(state, env, room, t.chat.budgetEvent);
     let eligible = eligibleAgents(state, room);
     if (!eligible.length)
@@ -256,8 +255,7 @@ export function transition(state: AgoraState, env: Envelope): AgoraState {
       tokens: room.tokens + (local ? 0 : 400),
       localTokens: room.localTokens + (local ? 400 : 0),
     };
-    const reached =
-      updated.simulatedTurns >= updated.maxMessages || updated.spent >= updated.budget;
+    const reached = updated.spent >= updated.budget;
     if (reached) updated.status = 'stopped';
     const next = addMessage(
       { ...state, rooms: state.rooms.map((r) => (r.id === room.id ? updated : r)) },

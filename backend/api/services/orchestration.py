@@ -66,13 +66,11 @@ def _prepare_turn(room_id: UUID, trigger_event_id: UUID) -> TurnContext | None:
         idempotency_key = f"agent-turn:{trigger_event_id}"
         if db.scalar(select(Message.id).where(Message.idempotency_key == idempotency_key)):
             return None
-        message_count = db.scalar(select(func.count(Message.id)).where(Message.room_id == room.id)) or 0
         started_at = room.started_at
         if started_at and started_at.tzinfo is None:
             started_at = started_at.replace(tzinfo=timezone.utc)
         if (
-            message_count >= room.max_messages
-            or room.amount_spent >= room.budget_limit
+            room.amount_spent >= room.budget_limit
             or (
                 started_at
                 and datetime.now(timezone.utc) - started_at
@@ -172,6 +170,21 @@ def _cost(provider: ProviderConnection, prompt_tokens: int, completion_tokens: i
     return (input_rate * prompt_tokens + output_rate * completion_tokens) / Decimal(1_000_000)
 
 
+def _publish_typing(context: TurnContext, typing: bool) -> None:
+    """Diffuse un état éphémère sans conserver de verrou pendant l'appel au modèle."""
+
+    event_type = "agent.typing" if typing else "agent.idle"
+    with SessionLocal() as db:
+        append_room_event(
+            db,
+            context.room_id,
+            event_type,
+            {"agentId": str(context.agent_id)},
+            actor_agent_id=context.agent_id,
+        )
+        db.commit()
+
+
 def execute_room_turn(room_id: UUID, trigger_event_id: UUID) -> dict[str, str]:
     """Génère puis persiste au plus une réponse pour l'événement déclencheur."""
 
@@ -198,16 +211,20 @@ def execute_room_turn(room_id: UUID, trigger_event_id: UUID) -> dict[str, str]:
         provider = db.get(ProviderConnection, context.provider_id)
         if not provider:
             return {"status": "skipped", "roomId": str(room_id)}
-        result = generate_model_response(
-            provider,
-            ModelRequest(
-                context.model,
-                context.system_prompt,
-                context.messages,
-                context.temperature,
-                context.max_tokens,
-            ),
-        )
+        _publish_typing(context, True)
+        try:
+            result = generate_model_response(
+                provider,
+                ModelRequest(
+                    context.model,
+                    context.system_prompt,
+                    context.messages,
+                    context.temperature,
+                    context.max_tokens,
+                ),
+            )
+        finally:
+            _publish_typing(context, False)
         provider_kind = provider.kind
         cost = _cost(provider, result.prompt_tokens, result.completion_tokens)
     with SessionLocal() as db:
@@ -222,7 +239,6 @@ def execute_room_turn(room_id: UUID, trigger_event_id: UUID) -> dict[str, str]:
             return {"status": "already_completed", "roomId": str(room_id), "messageId": str(existing.id)}
         if not room or room.status != RoomStatus.RUNNING:
             return {"status": "skipped", "roomId": str(room_id)}
-        count = db.scalar(select(func.count(Message.id)).where(Message.room_id == room.id)) or 0
         started_at = room.started_at
         if started_at and started_at.tzinfo is None:
             started_at = started_at.replace(tzinfo=timezone.utc)
@@ -231,7 +247,7 @@ def execute_room_turn(room_id: UUID, trigger_event_id: UUID) -> dict[str, str]:
             and datetime.now(timezone.utc) - started_at
             >= timedelta(minutes=room.max_duration_minutes)
         )
-        if count >= room.max_messages or room.amount_spent + cost > room.budget_limit or expired:
+        if room.amount_spent + cost > room.budget_limit or expired:
             return {"status": "budget_exhausted", "roomId": str(room_id)}
         message = Message(
             room_id=room.id,

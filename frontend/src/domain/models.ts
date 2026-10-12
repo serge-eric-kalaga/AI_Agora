@@ -57,7 +57,7 @@ export const roomSchema = z.object({
   status: z.enum(['draft', 'running', 'paused', 'stopped']),
   budget: z.number().positive(),
   spent: z.number().nonnegative(),
-  maxMessages: z.number().positive(),
+  maxMessages: z.number().positive().nullable(),
   maxMinutes: z.number().positive(),
   tokens: z.number().nonnegative(),
   localTokens: z.number().nonnegative(),

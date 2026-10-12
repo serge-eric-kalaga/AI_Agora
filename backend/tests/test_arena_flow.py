@@ -84,6 +84,7 @@ def test_secure_provider_and_idempotent_arena_flow(
     )
     assert created.status_code == 201, created.text
     room = created.json()
+    assert room["maxMessages"] is None
     replay = client.post(
         f"/api/v1/workspaces/{workspace_id}/rooms",
         headers=command_headers,

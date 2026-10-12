@@ -228,7 +228,7 @@ const blank: AgentDraft = {
   traits: { creativity: 65, rigor: 75, humor: 30, diplomacy: 80 },
   tools: [],
   temperature: 0.7,
-  maxTokens: 1024,
+  maxTokens: 1200,
 };
 export function AgentEditor({ id }: { id?: string }) {
   const { state } = useAgora();

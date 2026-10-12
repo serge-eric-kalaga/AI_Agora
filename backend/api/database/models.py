@@ -194,7 +194,8 @@ class Room(Base, TimestampMixin):
     tools: Mapped[list[str]] = mapped_column(JSON, default=list)
     budget_limit: Mapped[Decimal] = mapped_column(Numeric(12, 4))
     amount_spent: Mapped[Decimal] = mapped_column(Numeric(12, 4), default=Decimal("0"))
-    max_messages: Mapped[int] = mapped_column(Integer)
+    # Conservé nullable pour lire les anciennes salles sans imposer de plafond artificiel.
+    max_messages: Mapped[int | None] = mapped_column(Integer, nullable=True)
     max_duration_minutes: Mapped[int] = mapped_column(Integer)
     cloud_tokens: Mapped[int] = mapped_column(Integer, default=0)
     local_tokens: Mapped[int] = mapped_column(Integer, default=0)

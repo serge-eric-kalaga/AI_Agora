@@ -133,6 +133,13 @@ def test_local_turn_is_idempotent_and_accounts_for_tokens(
         assert stored_room.local_tokens == 84
         assert stored_room.cloud_tokens == 0
         assert stored_room.amount_spent == 0
+        event_types = db.scalars(
+            select(ConversationEvent.event_type).where(
+                ConversationEvent.room_id == UUID(room["id"])
+            )
+        ).all()
+        assert event_types.count("agent.typing") == 2
+        assert event_types.count("agent.idle") == 2
 
     failure_trigger = uuid4()
     first_failure = record_room_failure(UUID(room["id"]), failure_trigger, "model_not_found")

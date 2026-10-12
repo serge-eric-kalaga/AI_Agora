@@ -8,7 +8,7 @@ from uuid import UUID
 
 from celery.exceptions import OperationalError
 from fastapi import APIRouter, Header, Query, Request, status
-from sqlalchemy import func, select
+from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 from sqlalchemy.sql import Select
 from starlette.responses import StreamingResponse
@@ -189,6 +189,8 @@ def create_room(
         return _room_read(_room(db, workspace_id, existing.resource_id))
     _validate_agents(db, workspace_id, payload.participant_ids)
     values = payload.model_dump(exclude={"participant_ids"})
+    # Une conversation reste ouverte jusqu'à une action humaine, la durée ou le budget configuré.
+    values["max_messages"] = None
     room = Room(workspace_id=workspace_id, created_by_id=current_user.id, **values)
     db.add(room)
     db.flush()
@@ -367,9 +369,6 @@ def create_message(
         return _message_read(db, existing, current_user.id)
     if room.status == RoomStatus.STOPPED:
         raise ConflictError("room_stopped", "Aucun message ne peut être ajouté à une arène arrêtée.")
-    count = db.scalar(select(func.count(Message.id)).where(Message.room_id == room_id)) or 0
-    if count >= room.max_messages:
-        raise DomainError("message_budget_exhausted", "Le nombre maximal de messages est atteint.", 422)
     if room.amount_spent >= room.budget_limit:
         raise DomainError("cost_budget_exhausted", "Le budget financier de l'arène est épuisé.", 422)
     if payload.reply_to_id:

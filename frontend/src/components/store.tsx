@@ -66,7 +66,10 @@ type Store = {
   setParticipant: (room: Room, agentId: string, present: boolean) => Promise<Room>;
   sendMessage: (roomId: string, content: string, replyToId?: string) => Promise<void>;
   setReaction: (message: Message, emoji: string, present: boolean) => Promise<Message>;
-  subscribeRoom: (roomId: string) => () => void;
+  subscribeRoom: (
+    roomId: string,
+    onTyping?: (agentId: string, typing: boolean) => void,
+  ) => () => void;
   storageWarning: string;
   toast: string;
   notify: (text: string) => void;
@@ -356,12 +359,16 @@ export function AgoraProvider({ children }: { children: ReactNode }) {
   }
 
   const subscribeRoom = useCallback(
-    (roomId: string) => {
+    (roomId: string, onTyping?: (agentId: string, typing: boolean) => void) => {
       if (demoMode || !activeWorkspaceId) return () => undefined;
       const key = `ai-agora.room-cursor.${roomId}`;
       const cursor = window.sessionStorage.getItem(key) ?? '0';
-      return subscribeRoomEvents(activeWorkspaceId, roomId, cursor, (nextCursor) => {
-        window.sessionStorage.setItem(key, nextCursor);
+      return subscribeRoomEvents(activeWorkspaceId, roomId, cursor, (event) => {
+        window.sessionStorage.setItem(key, event.cursor);
+        if ((event.type === 'agent.typing' || event.type === 'agent.idle') && event.agentId) {
+          onTyping?.(event.agentId, event.type === 'agent.typing');
+          return;
+        }
         void readRoom(activeWorkspaceId, roomId).then((roomData) => send({ roomData }));
       });
     },

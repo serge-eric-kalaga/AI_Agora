@@ -23,7 +23,12 @@ class RoomCreate(APIModel):
     rules: str = Field(default="", max_length=10_000)
     tools: list[str] = Field(default_factory=list)
     budget_limit: Decimal = Field(gt=0, max_digits=12, decimal_places=4, examples=[25])
-    max_messages: int = Field(default=100, ge=1, le=10_000)
+    max_messages: int | None = Field(
+        default=None,
+        ge=1,
+        le=10_000,
+        description="Champ historique accepté pour compatibilité. Les conversations ne sont plus plafonnées.",
+    )
     max_duration_minutes: int = Field(default=60, ge=1, le=43_200)
     participant_ids: list[UUID] = Field(min_length=2)
 
@@ -56,7 +61,7 @@ class RoomRead(APIModel):
     tools: list[str]
     budget_limit: Decimal
     amount_spent: Decimal
-    max_messages: int
+    max_messages: int | None
     max_duration_minutes: int
     cloud_tokens: int
     local_tokens: int

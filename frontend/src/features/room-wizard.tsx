@@ -43,7 +43,7 @@ export function RoomWizard() {
     rules: '',
     tools: [],
     budget: 5,
-    maxMessages: 30,
+    maxMessages: null,
     maxMinutes: 60,
   });
   const update = <K extends keyof RoomDraft>(key: K, value: RoomDraft[K]) =>
@@ -55,8 +55,6 @@ export function RoomWizard() {
       index === 5 &&
       (!Number.isFinite(draft.budget) ||
         draft.budget <= 0 ||
-        !Number.isInteger(draft.maxMessages) ||
-        draft.maxMessages < 1 ||
         !Number.isFinite(draft.maxMinutes) ||
         draft.maxMinutes <= 0)
     )
@@ -329,25 +327,14 @@ export function RoomWizard() {
                   onChange={(e) => update('budget', Number(e.target.value))}
                 />
               </Field>
-              <div className="form-grid">
-                <Field label={t.rooms.maxMessages}>
-                  <input
-                    type="number"
-                    min={1}
-                    max={10000}
-                    value={draft.maxMessages}
-                    onChange={(e) => update('maxMessages', Number(e.target.value))}
-                  />
-                </Field>
-                <Field label={t.rooms.maxMinutes}>
-                  <input
-                    type="number"
-                    min={1}
-                    value={draft.maxMinutes}
-                    onChange={(e) => update('maxMinutes', Number(e.target.value))}
-                  />
-                </Field>
-              </div>
+              <Field label={t.rooms.maxMinutes}>
+                <input
+                  type="number"
+                  min={1}
+                  value={draft.maxMinutes}
+                  onChange={(e) => update('maxMinutes', Number(e.target.value))}
+                />
+              </Field>
               <div className="info-box">
                 <Shield size={19} />
                 {t.rooms.limitsHint}

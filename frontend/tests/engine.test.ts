@@ -54,16 +54,16 @@ test('local responses consume tokens without charging cloud costs', () => {
   assert.equal(after.rooms[0].spent, state.rooms[0].spent);
   assert.equal(after.rooms[0].localTokens, state.rooms[0].localTokens + 400);
 });
-test('response ceiling ends the simulation at the exact limit', () => {
+test('conversation remains open after successive agent responses', () => {
   const state = running();
-  state.rooms[0].maxMessages = state.rooms[0].simulatedTurns + 1;
+  state.rooms[0].maxMessages = null;
   const after = transition(state, {
     id: 'x',
     now,
     command: { type: 'room.simulate', roomId: 'ethique-ia', selection: 0 },
   });
-  assert.equal(after.rooms[0].status, 'stopped');
-  assert.equal(after.rooms[0].simulatedTurns, after.rooms[0].maxMessages);
+  assert.equal(after.rooms[0].status, 'running');
+  assert.equal(after.rooms[0].simulatedTurns, state.rooms[0].simulatedTurns + 1);
 });
 test('expired session stops before a model response', () => {
   const state = running();

@@ -68,7 +68,7 @@ const roomReadSchema = z.object({
   tools: z.array(z.string()),
   budgetLimit: z.coerce.number(),
   amountSpent: z.coerce.number(),
-  maxMessages: z.number(),
+  maxMessages: z.number().nullable(),
   maxDurationMinutes: z.number(),
   cloudTokens: z.number(),
   localTokens: z.number(),
@@ -370,7 +370,7 @@ export function subscribeRoom(
   workspaceId: string,
   roomId: string,
   cursor: string,
-  onEvent: (cursor: string) => void,
+  onEvent: (event: { cursor: string; type: string; agentId?: string }) => void,
 ) {
   const source = new EventSource(
     `/api/backend/workspaces/${workspaceId}/rooms/${roomId}/stream?cursor=${encodeURIComponent(cursor)}`,
@@ -385,8 +385,20 @@ export function subscribeRoom(
     'message.created',
     'reaction.updated',
     'agent.failed',
+    'agent.typing',
+    'agent.idle',
   ];
-  const listener = (event: Event) => onEvent((event as MessageEvent).lastEventId || cursor);
+  const listener = (event: Event) => {
+    const message = event as MessageEvent;
+    let agentId: string | undefined;
+    try {
+      const data = JSON.parse(message.data) as { payload?: { agentId?: string } };
+      agentId = data.payload?.agentId;
+    } catch {
+      // Un événement métier reste exploitable même si sa charge utile est absente.
+    }
+    onEvent({ cursor: message.lastEventId || cursor, type: event.type, agentId });
+  };
   eventTypes.forEach((type) => source.addEventListener(type, listener));
   return () => source.close();
 }
