@@ -58,7 +58,8 @@ longue, puis revérifie l’état de la salle avant de persister message, usage 
 d’une reprise Celery.
 
 La suite ajoutera les décisions de silence ou réaction, les diagnostics finaux
-après épuisement des retries, puis les chaînes multi-agents bornées.
+plus riches et les verrous distribués pour les salles très concurrentes. Les
+chaînes multi-agents sont déjà bornées par configuration et par les budgets.
 
 Les WebSockets pourront être ajoutés si des commandes bidirectionnelles à faible
 latence deviennent nécessaires. Pour le MVP, SSE suffit au flux serveur vers le

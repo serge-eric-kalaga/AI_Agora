@@ -1,15 +1,22 @@
 """Validation des fournisseurs et du tour d'agent sans appel externe."""
 
 from datetime import datetime, timezone
-from uuid import UUID
+from uuid import UUID, uuid4
 
 from fastapi.testclient import TestClient
 from sqlalchemy import func, select
 
 from api.database import SessionLocal
-from api.database.models import ConversationEvent, Message, ProviderConnection, ProviderKind, Room
+from api.database.models import (
+    ConversationEvent,
+    Message,
+    MessageKind,
+    ProviderConnection,
+    ProviderKind,
+    Room,
+)
 from api.services.model_clients import ModelRequest, ModelResult, generate_model_response
-from api.services.orchestration import execute_room_turn
+from api.services.orchestration import execute_room_turn, record_room_failure
 
 
 def _agent_payload(provider_id: str, name: str) -> dict[str, object]:
@@ -83,10 +90,12 @@ def test_local_turn_is_idempotent_and_accounts_for_tokens(
     )
 
     result = execute_room_turn(UUID(room["id"]), event_id)
+    followup = execute_room_turn(UUID(room["id"]), UUID(result["eventId"]))
     replay = execute_room_turn(UUID(room["id"]), event_id)
 
     assert result["status"] == "completed"
-    assert replay["status"] == "skipped"
+    assert followup["status"] == "completed"
+    assert replay["status"] == "already_completed"
     with SessionLocal() as db:
         stored_room = db.get(Room, UUID(room["id"]))
         agent_messages = db.scalar(
@@ -95,17 +104,31 @@ def test_local_turn_is_idempotent_and_accounts_for_tokens(
             )
         )
         assert stored_room
-        assert agent_messages == 1
-        generated = db.scalar(
+        assert agent_messages == 2
+        generated = db.scalars(
             select(Message).where(
                 Message.room_id == UUID(room["id"]), Message.author_agent_id.is_not(None)
             )
-        )
-        assert generated
-        assert str(generated.author_agent_id) == agents[1]["id"]
-        assert stored_room.local_tokens == 42
+        ).all()
+        assert {str(message.author_agent_id) for message in generated} == {
+            agents[0]["id"],
+            agents[1]["id"],
+        }
+        assert stored_room.local_tokens == 84
         assert stored_room.cloud_tokens == 0
         assert stored_room.amount_spent == 0
+
+    failure_trigger = uuid4()
+    first_failure = record_room_failure(UUID(room["id"]), failure_trigger, "model_not_found")
+    replayed_failure = record_room_failure(UUID(room["id"]), failure_trigger, "model_not_found")
+    assert first_failure["messageId"] == replayed_failure["messageId"]
+    with SessionLocal() as db:
+        failures = db.scalar(
+            select(func.count(Message.id)).where(
+                Message.room_id == UUID(room["id"]), Message.kind == MessageKind.SYSTEM
+            )
+        )
+    assert failures == 1
 
 
 def test_ollama_request_disables_hidden_reasoning(monkeypatch) -> None:

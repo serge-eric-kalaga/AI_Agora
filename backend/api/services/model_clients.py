@@ -14,6 +14,11 @@ from .providers import _validate_destination
 class ModelProviderError(RuntimeError):
     """Erreur transitoire ou réponse invalide d'un fournisseur IA."""
 
+    def __init__(self, message: str, *, code: str = "provider_error", retryable: bool = True) -> None:
+        super().__init__(message)
+        self.code = code
+        self.retryable = retryable
+
 
 @dataclass(frozen=True)
 class ModelRequest:
@@ -37,7 +42,11 @@ def _integer(value: object) -> int:
 
 def _post(provider: ProviderConnection, path: str, payload: dict[str, Any]) -> dict[str, Any]:
     if not provider.base_url:
-        raise ModelProviderError("Aucune URL n'est configurée pour ce fournisseur.")
+        raise ModelProviderError(
+            "Aucune URL n'est configurée pour ce fournisseur.",
+            code="invalid_provider_config",
+            retryable=False,
+        )
     _validate_destination(provider.base_url)
     headers: dict[str, str] = {"content-type": "application/json"}
     if provider.encrypted_api_key:
@@ -47,10 +56,27 @@ def _post(provider: ProviderConnection, path: str, payload: dict[str, Any]) -> d
             response = client.post(f"{provider.base_url.rstrip('/')}{path}", headers=headers, json=payload)
         response.raise_for_status()
         body = response.json()
-    except (httpx.HTTPError, ValueError) as exc:
-        raise ModelProviderError(f"Le fournisseur IA ne répond pas correctement: {type(exc).__name__}") from exc
+    except httpx.HTTPStatusError as exc:
+        status = exc.response.status_code
+        raise ModelProviderError(
+            f"Le fournisseur IA a refusé la requête ({status}).",
+            code="model_not_found" if status == 404 else "provider_rejected",
+            retryable=status == 429 or status >= 500,
+        ) from exc
+    except httpx.HTTPError as exc:
+        raise ModelProviderError("Le fournisseur IA est momentanément indisponible.") from exc
+    except ValueError as exc:
+        raise ModelProviderError(
+            "Le fournisseur IA a renvoyé une réponse illisible.",
+            code="invalid_provider_response",
+            retryable=False,
+        ) from exc
     if not isinstance(body, dict):
-        raise ModelProviderError("Le fournisseur IA a renvoyé un format inattendu.")
+        raise ModelProviderError(
+            "Le fournisseur IA a renvoyé un format inattendu.",
+            code="invalid_provider_response",
+            retryable=False,
+        )
     return body
 
 
@@ -99,5 +125,9 @@ def generate_model_response(provider: ProviderConnection, request: ModelRequest)
         prompt_tokens = _integer(usage.get("prompt_tokens"))
         completion_tokens = _integer(usage.get("completion_tokens"))
     if not isinstance(content, str) or not content.strip():
-        raise ModelProviderError("Le fournisseur IA n'a produit aucun contenu.")
+        raise ModelProviderError(
+            "Le fournisseur IA n'a produit aucun contenu.",
+            code="empty_model_response",
+            retryable=False,
+        )
     return ModelResult(content.strip(), prompt_tokens, completion_tokens)

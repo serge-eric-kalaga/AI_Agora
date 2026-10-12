@@ -35,6 +35,7 @@ class TurnContext:
     messages: list[dict[str, str]]
     temperature: float
     max_tokens: int
+    chain_depth: int
 
 
 def _bounded_number(value: object, default: float, minimum: float, maximum: float) -> float:
@@ -56,8 +57,12 @@ def _prepare_turn(room_id: UUID, trigger_event_id: UUID) -> TurnContext | None:
             trigger_message = db.get(Message, UUID(str(trigger_message_id)))
         except ValueError:
             return None
-        if not trigger_message or trigger_message.author_user_id is None:
+        if not trigger_message or (
+            trigger_message.author_user_id is None and trigger_message.author_agent_id is None
+        ):
             return None
+        raw_depth = event.payload.get("chainDepth", 0)
+        chain_depth = raw_depth if isinstance(raw_depth, int) and raw_depth >= 0 else 0
         idempotency_key = f"agent-turn:{trigger_event_id}"
         if db.scalar(select(Message.id).where(Message.idempotency_key == idempotency_key)):
             return None
@@ -101,6 +106,7 @@ def _prepare_turn(room_id: UUID, trigger_event_id: UUID) -> TurnContext | None:
             participants,
             key=lambda item: (
                 0 if f"@{item[0].name.casefold()}" in content else 1,
+                1 if item[0].id == trigger_message.author_agent_id else 0,
                 contributions.get(item[0].id, 0),
                 item[0].name.casefold(),
             ),
@@ -145,6 +151,7 @@ def _prepare_turn(room_id: UUID, trigger_event_id: UUID) -> TurnContext | None:
             messages,
             _bounded_number(config.get("temperature"), 0.7, 0, 2),
             int(_bounded_number(config.get("maxTokens"), 1024, 64, 8_192)),
+            chain_depth,
         )
 
 
@@ -158,6 +165,22 @@ def _cost(provider: ProviderConnection, prompt_tokens: int, completion_tokens: i
 def execute_room_turn(room_id: UUID, trigger_event_id: UUID) -> dict[str, str]:
     """Génère puis persiste au plus une réponse pour l'événement déclencheur."""
 
+    idempotency_key = f"agent-turn:{trigger_event_id}"
+    with SessionLocal() as db:
+        completed_event = db.scalar(
+            select(ConversationEvent).where(
+                ConversationEvent.room_id == room_id,
+                ConversationEvent.idempotency_key == idempotency_key,
+            )
+        )
+        if completed_event:
+            depth = completed_event.payload.get("chainDepth", 0)
+            return {
+                "status": "already_completed",
+                "roomId": str(room_id),
+                "eventId": str(completed_event.id),
+                "chainDepth": str(depth if isinstance(depth, int) else 0),
+            }
     context = _prepare_turn(room_id, trigger_event_id)
     if not context:
         return {"status": "skipped", "roomId": str(room_id)}
@@ -177,7 +200,6 @@ def execute_room_turn(room_id: UUID, trigger_event_id: UUID) -> dict[str, str]:
         )
         provider_kind = provider.kind
         cost = _cost(provider, result.prompt_tokens, result.completion_tokens)
-    idempotency_key = f"agent-turn:{trigger_event_id}"
     with SessionLocal() as db:
         room = db.scalar(select(Room).where(Room.id == room_id).with_for_update())
         existing = db.scalar(
@@ -222,13 +244,63 @@ def execute_room_turn(room_id: UUID, trigger_event_id: UUID) -> dict[str, str]:
         else:
             room.cloud_tokens += total_tokens
             room.amount_spent += cost
-        append_room_event(
+        event = append_room_event(
             db,
             room.id,
             "message.created",
-            {"messageId": str(message.id), "triggerEventId": str(trigger_event_id)},
+            {
+                "messageId": str(message.id),
+                "triggerEventId": str(trigger_event_id),
+                "chainDepth": context.chain_depth + 1,
+            },
             actor_agent_id=context.agent_id,
             idempotency_key=idempotency_key,
         )
+        db.flush()
         db.commit()
-        return {"status": "completed", "roomId": str(room_id), "messageId": str(message.id)}
+        return {
+            "status": "completed",
+            "roomId": str(room_id),
+            "messageId": str(message.id),
+            "eventId": str(event.id),
+            "chainDepth": str(context.chain_depth + 1),
+        }
+
+
+def record_room_failure(room_id: UUID, trigger_event_id: UUID, error_code: str) -> dict[str, str]:
+    """Rend un échec final visible sans révéler le détail du fournisseur."""
+
+    idempotency_key = f"agent-error:{trigger_event_id}"
+    with SessionLocal() as db:
+        existing = db.scalar(
+            select(Message).where(
+                Message.room_id == room_id,
+                Message.idempotency_key == idempotency_key,
+            )
+        )
+        if existing:
+            return {"status": "failed", "roomId": str(room_id), "messageId": str(existing.id)}
+        room = db.get(Room, room_id)
+        if not room:
+            return {"status": "skipped", "roomId": str(room_id)}
+        message = Message(
+            room_id=room.id,
+            kind=MessageKind.SYSTEM,
+            content=(
+                "Un agent n’a pas pu répondre après les tentatives autorisées. "
+                "Vérifiez son fournisseur et son modèle."
+            ),
+            idempotency_key=idempotency_key,
+            metadata_json={"errorCode": error_code},
+        )
+        db.add(message)
+        db.flush()
+        append_room_event(
+            db,
+            room.id,
+            "agent.failed",
+            {"messageId": str(message.id), "errorCode": error_code},
+            idempotency_key=idempotency_key,
+        )
+        db.commit()
+        return {"status": "failed", "roomId": str(room_id), "messageId": str(message.id)}

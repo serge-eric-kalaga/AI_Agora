@@ -33,6 +33,7 @@ class Settings(BaseSettings):
     log_level: str = "INFO"
     sse_poll_interval_seconds: float = 0.75
     sse_heartbeat_seconds: float = 15.0
+    max_agent_turns_per_trigger: int = Field(default=3, ge=1, le=10)
     allow_private_provider_endpoints: bool = False
 
     @field_validator("frontend_origins", mode="before")

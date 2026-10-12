@@ -42,6 +42,7 @@ services:
       CREDENTIAL_ENCRYPTION_KEY: ${CREDENTIAL_ENCRYPTION_KEY:-}
       FRONTEND_ORIGINS: '${FRONTEND_ORIGINS:-["http://localhost:3000","http://127.0.0.1:3000"]}'
       ALLOW_PRIVATE_PROVIDER_ENDPOINTS: "true"
+      MAX_AGENT_TURNS_PER_TRIGGER: ${MAX_AGENT_TURNS_PER_TRIGGER:-3}
       RUN_MIGRATIONS: "true"
     depends_on:
       postgres:

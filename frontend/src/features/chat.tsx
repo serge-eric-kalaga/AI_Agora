@@ -183,7 +183,7 @@ function ChatRoom({ room }: { room: Room }) {
           <div>
             <dt>{t.chat.turns}</dt>
             <dd>
-              {room.simulatedTurns} / {room.maxMessages}
+              {messages.filter((message) => message.agentId).length} / {room.maxMessages}
             </dd>
           </div>
           <div>

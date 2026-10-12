@@ -384,6 +384,7 @@ export function subscribeRoom(
     'agent.left',
     'message.created',
     'reaction.updated',
+    'agent.failed',
   ];
   const listener = (event: Event) => onEvent((event as MessageEvent).lastEventId || cursor);
   eventTypes.forEach((type) => source.addEventListener(type, listener));

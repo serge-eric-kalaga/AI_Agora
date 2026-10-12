@@ -48,7 +48,7 @@ Swagger est disponible sur [http://localhost:8000/docs](http://localhost:8000/do
 
 Dans l’interface, créez un fournisseur local avec l’adresse `http://host.docker.internal:11434`, puis utilisez **Tester la connexion** pour découvrir les modèles. Le worker privilégie le modèle choisi sur chaque agent et comptabilise ses tokens séparément des coûts cloud. Ne publiez pas le port Ollama sur Internet.
 
-Le mode API est actif par défaut. Le mode de démonstration local reste disponible avec `NEXT_PUBLIC_DATA_MODE=demo`. Les modes arrière-plan et permanent, les invitations, les outils externes, les exports PDF et les chaînes autonomes de plusieurs interventions seront complétés progressivement.
+Le mode API est actif par défaut. Le mode de démonstration local reste disponible avec `NEXT_PUBLIC_DATA_MODE=demo`. Une intervention humaine peut déclencher jusqu’à trois réponses d’agents, valeur réglable par `MAX_AGENT_TURNS_PER_TRIGGER`. Les modes arrière-plan et permanent, les invitations, les outils externes et les exports PDF seront complétés progressivement.
 
 ## Repères
 

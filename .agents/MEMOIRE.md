@@ -8,6 +8,7 @@
 - Les espaces, fournisseurs, agents, salles, messages, réactions et statuts utilisent l’API réelle.
 - Les événements de salle sont suivis par SSE avec reprise du dernier curseur en session.
 - Le worker produit une réponse réelle via Ollama ou une API compatible OpenAI après un message humain.
+- Une intervention déclenche une chaîne bornée de 3 réponses ; les échecs finaux deviennent visibles dans le chat.
 - Les clés fournisseurs sont chiffrées par le backend et ne sont jamais restituées.
 
 ## État vérifié au 12/10/2026
@@ -23,5 +24,5 @@
 ## Prochain objectif
 
 1. Valider le parcours complet message humain vers réponse Ollama dans l’interface.
-2. Ajouter les diagnostics d’échec du worker et les tests E2E automatisés.
-3. Étendre l’orchestration aux silences, réactions et chaînes multi-agents bornées.
+2. Ajouter les tests E2E automatisés et un verrou distribué par salle.
+3. Étendre l’orchestration aux décisions de silence et réactions.
