@@ -3,8 +3,8 @@
 ## Décisions structurantes
 
 Le backend reste un service FastAPI modulaire. PostgreSQL est la source de
-vérité transactionnelle ; Redis transporte les tâches Celery et pourra fournir
-les verrous courts de l'orchestrateur. Ce choix reprend les bons découpages du
+vérité transactionnelle ; Redis transporte les tâches Celery et fournit les
+verrous courts de l'orchestrateur. Ce choix reprend les bons découpages du
 projet DBChat tout en retirant les dépendances MySQL, les valeurs de sécurité par
 défaut et les responsabilités mêlées dans les routes.
 
@@ -47,6 +47,7 @@ flowchart LR
    `409 Conflict` en cas de donnée périmée.
 9. Un événement humain ne produit qu’un message d’agent par clé idempotente.
 10. Les tokens Ollama restent séparés des tokens et coûts cloud.
+11. Un verrou Redis expirant sérialise les générations concurrentes d’une même salle.
 
 ## Orchestration IA
 
@@ -57,9 +58,11 @@ longue, puis revérifie l’état de la salle avant de persister message, usage 
 événement. La clé dérivée de l’événement déclencheur empêche les doublons lors
 d’une reprise Celery.
 
-La suite ajoutera les décisions de silence ou réaction, les diagnostics finaux
-plus riches et les verrous distribués pour les salles très concurrentes. Les
-chaînes multi-agents sont déjà bornées par configuration et par les budgets.
+Les réponses vides transitoires et les erreurs fournisseurs éligibles sont
+relancées avec un délai croissant. Après épuisement des retries, un message
+système et un événement `agent.failed` rendent l’échec visible sans exposer les
+détails du fournisseur. Les chaînes multi-agents sont bornées par configuration
+et par les budgets.
 
 Les WebSockets pourront être ajoutés si des commandes bidirectionnelles à faible
 latence deviennent nécessaires. Pour le MVP, SSE suffit au flux serveur vers le

@@ -9,6 +9,7 @@
 - Les événements de salle sont suivis par SSE avec reprise du dernier curseur en session.
 - Le worker produit une réponse réelle via Ollama ou une API compatible OpenAI après un message humain.
 - Une intervention déclenche une chaîne bornée de 3 réponses ; les échecs finaux deviennent visibles dans le chat.
+- Un verrou Redis expirant sérialise les générations d’une même salle.
 - Les clés fournisseurs sont chiffrées par le backend et ne sont jamais restituées.
 
 ## État vérifié au 12/10/2026
@@ -19,10 +20,13 @@
 - La création d’agent est vérifiée de bout en bout après correction de l’origine derrière Docker : l’agent Ariane apparaît dans l’interface et dans `agent_definitions` avec son fournisseur.
 - Le parcours salle est vérifié de bout en bout : 2 participants, création et reprise, message, réaction et rafraîchissement SSE persistés dans PostgreSQL.
 - Vérifications frontend valides : formatage, TypeScript, ESLint, build Next.js et 12 tests unitaires.
-- Ollama hôte est joignable depuis Docker ; `qwen3.5:4b` a répondu avec comptage des tokens.
+- Ollama hôte est joignable depuis Docker ; `qwen3.5:4b` a produit une chaîne réelle `Socrate → Athéna → Socrate` depuis l’interface, persistée avec 3 531 tokens locaux et 0 € cloud.
+- Vérifications backend valides : Ruff, mypy et 11 tests Pytest.
+- Vérifications frontend valides : formatage, TypeScript, ESLint, build Next.js, 12 tests unitaires et 4 parcours Playwright.
+- La configuration de production refuse les secrets faibles, les clés Fernet invalides, CORS `*` et les endpoints fournisseurs privés.
 
-## Prochain objectif
+## Extensions post-MVP
 
-1. Valider le parcours complet message humain vers réponse Ollama dans l’interface.
-2. Ajouter les tests E2E automatisés et un verrou distribué par salle.
-3. Étendre l’orchestration aux décisions de silence et réactions.
+1. Invitations par email et gestion visuelle des membres d’un espace.
+2. Planification durable des salles en arrière-plan ou permanentes.
+3. Outils externes, pièces jointes, streaming token par token et export PDF.

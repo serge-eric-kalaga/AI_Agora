@@ -55,6 +55,6 @@ Pour ajouter une langue : ajouter son dictionnaire typé, étendre `locales`, s�
 ## Limites connues
 
 - Suggestions de personnalité et synthèse encore locales.
-- Pas encore de streaming token par token, d’outils externes, de pièces jointes ni de chaînes autonomes multi-agents.
+- Les chaînes réelles sont bornées à trois réponses par intervention ; pas encore de streaming token par token, d’outils externes ni de pièces jointes.
 - Les modes arrière-plan et permanent sont configurables mais leur planification durable reste à compléter.
 - L’audit npm complet signale cinq entrées de vulnérabilité élevées dans la chaîne **de développement** `eslint-config-next → fast-glob → micromatch → braces`. Au 11/10/2026, la correction automatique proposée implique un retour majeur à Next ESLint 14 et n’a pas été appliquée. L’audit limité aux dépendances de production ne signale aucune vulnérabilité. Éviter de traiter des motifs glob non fiables avec cette chaîne ; réévaluer lors d’une mise à jour upstream.

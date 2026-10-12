@@ -41,14 +41,16 @@ Swagger est disponible sur [http://localhost:8000/docs](http://localhost:8000/do
 - Agents versionnés et arènes à transitions contrôlées.
 - Messages et réactions idempotents, budgets et événements ordonnés.
 - REST documenté, SSE reprenable, audit, métriques, migrations et worker Celery.
-- Tours d’agents asynchrones via Ollama ou API compatible OpenAI, avec idempotence et comptage des tokens.
+- Chaînes asynchrones de réponses via Ollama ou API compatible OpenAI, avec mentions, équité entre agents, retries, idempotence, verrou par salle et comptage des tokens.
 - Stack Docker orientée AI Agora : PostgreSQL, Redis, backend, worker, frontend et profil Ollama.
 
 ## Ollama sur la machine hôte
 
 Dans l’interface, créez un fournisseur local avec l’adresse `http://host.docker.internal:11434`, puis utilisez **Tester la connexion** pour découvrir les modèles. Le worker privilégie le modèle choisi sur chaque agent et comptabilise ses tokens séparément des coûts cloud. Ne publiez pas le port Ollama sur Internet.
 
-Le mode API est actif par défaut. Le mode de démonstration local reste disponible avec `NEXT_PUBLIC_DATA_MODE=demo`. Une intervention humaine peut déclencher jusqu’à trois réponses d’agents, valeur réglable par `MAX_AGENT_TURNS_PER_TRIGGER`. Les modes arrière-plan et permanent, les invitations, les outils externes et les exports PDF seront complétés progressivement.
+Le mode API est actif par défaut. Le mode de démonstration local reste disponible avec `NEXT_PUBLIC_DATA_MODE=demo`. Une intervention humaine peut déclencher jusqu’à trois réponses d’agents, valeur réglable par `MAX_AGENT_TURNS_PER_TRIGGER`.
+
+Le MVP utilisable couvre le laboratoire personnel et les salles accessibles aux membres d’un même espace. Les invitations par email, la planification durable des modes arrière-plan/permanent, l’exécution d’outils externes, les pièces jointes et l’export PDF relèvent des extensions post-MVP ; l’export JSON complet est opérationnel.
 
 ## Repères
 
