@@ -23,6 +23,7 @@ from api.services.model_clients import (
     generate_model_response,
 )
 from api.services.orchestration import execute_room_turn, record_room_failure
+from api.tasks import RoomTurnBusy, _execute_with_room_lock
 
 
 def _agent_payload(provider_id: str, name: str) -> dict[str, object]:
@@ -223,6 +224,57 @@ def test_empty_ollama_response_is_retryable(monkeypatch) -> None:
 
     assert error.value.code == "empty_model_response"
     assert error.value.retryable is True
+
+
+def test_room_turn_lock_releases_after_generation(monkeypatch) -> None:
+    """Le verrou Redis est toujours libéré après le tour sérialisé."""
+
+    state = {"released": False, "closed": False}
+
+    class FakeLock:
+        def acquire(self, **_kwargs) -> bool:
+            return True
+
+        def release(self) -> None:
+            state["released"] = True
+
+    class FakeRedis:
+        def lock(self, *_args, **_kwargs) -> FakeLock:
+            return FakeLock()
+
+        def close(self) -> None:
+            state["closed"] = True
+
+    monkeypatch.setattr("api.tasks.Redis.from_url", lambda _url: FakeRedis())
+    monkeypatch.setattr(
+        "api.tasks.execute_room_turn",
+        lambda room_id, event_id: {"status": "completed", "roomId": str(room_id)},
+    )
+
+    result = _execute_with_room_lock(uuid4(), uuid4())
+
+    assert result["status"] == "completed"
+    assert state == {"released": True, "closed": True}
+
+
+def test_room_turn_lock_rejects_concurrent_generation(monkeypatch) -> None:
+    """Un worker concurrent doit repasser par le mécanisme de retry Celery."""
+
+    class FakeLock:
+        def acquire(self, **_kwargs) -> bool:
+            return False
+
+    class FakeRedis:
+        def lock(self, *_args, **_kwargs) -> FakeLock:
+            return FakeLock()
+
+        def close(self) -> None:
+            return None
+
+    monkeypatch.setattr("api.tasks.Redis.from_url", lambda _url: FakeRedis())
+
+    with pytest.raises(RoomTurnBusy):
+        _execute_with_room_lock(uuid4(), uuid4())
 
 
 def test_provider_diagnostic_refreshes_discovered_models(

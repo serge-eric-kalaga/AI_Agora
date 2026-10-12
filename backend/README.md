@@ -92,7 +92,9 @@ ayant le moins contribué est favorisé. Les appels Ollama et OpenAI compatibles
 sont normalisés, idempotents et soumis aux limites de durée, messages et coût.
 Les tokens locaux et cloud sont comptabilisés séparément. Une chaîne contient
 au maximum `MAX_AGENT_TURNS_PER_TRIGGER` réponses (3 par défaut). Un échec final
-après retries devient un message système et un événement `agent.failed`.
+après retries devient un message système et un événement `agent.failed`. Un verrou
+Redis par salle, expirant après `ROOM_TURN_LOCK_SECONDS`, empêche deux workers de
+générer simultanément des réponses concurrentes dans une même conversation.
 
 Pour joindre un Ollama déjà lancé sur la machine hôte depuis Docker, configurez
 le fournisseur avec `http://host.docker.internal:11434`. Sans Docker, utilisez
