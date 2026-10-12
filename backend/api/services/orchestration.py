@@ -1,6 +1,7 @@
 """Orchestration idempotente d'une réponse d'agent dans une salle."""
 
 import hashlib
+import json
 import re
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
@@ -24,12 +25,10 @@ from api.database.models import (
 )
 
 from .events import append_room_event
-from .model_clients import ModelRequest, ModelResult, generate_model_response
+from .model_clients import ModelProviderError, ModelRequest, ModelResult, generate_model_response
 
 _SIMULATION_LABEL = re.compile(r"\s*\(simulation(?: analytique)?\)", re.IGNORECASE)
-_HISTORY_SPEAKER_LABEL = re.compile(
-    r'^\s*\[(?:AGENT|HUMAIN)\s+[^\]]+\]\s*', re.IGNORECASE
-)
+_HISTORY_SPEAKER_LABEL = re.compile(r"^\s*\[(?:AGENT|HUMAIN)\s+[^\]]+\]\s*", re.IGNORECASE)
 
 
 @dataclass(frozen=True)
@@ -38,6 +37,7 @@ class TurnContext:
     trigger_event_id: UUID
     trigger_message_id: UUID
     agent_id: UUID
+    agent_name: str
     participant_names: tuple[str, ...]
     provider_id: UUID
     model: str
@@ -100,7 +100,7 @@ def _target_message_envelope(
     if message.author_agent_id:
         author_kind = "agent"
         author_name = participant_names.get(message.author_agent_id, "Agent")
-        identity_rule = f'Réponds d’abord à l’agent « {author_name} ».'
+        identity_rule = f"Réponds d’abord à l’agent « {author_name} »."
     else:
         author_kind = "humain"
         author_name = "Vous"
@@ -210,11 +210,16 @@ def _condense_response(
         ModelRequest(
             request.model,
             (
+                request.system_prompt + "\n\n"
                 "Réécris le texte fourni en français, en 100 à 160 mots maximum. "
+                "Garde strictement ton identité, ta perspective et le destinataire initial. "
                 "Conserve l’idée principale, les réserves utiles et une proposition concrète. "
                 "N’ajoute aucun nom, titre, préambule ou commentaire sur la réécriture."
             ),
-            [{"role": "user", "content": result.content}],
+            [
+                *request.messages,
+                {"role": "user", "content": "Texte à condenser :\n" + result.content},
+            ],
             min(request.temperature, 0.3),
             min(request.max_tokens, 512),
         ),
@@ -224,6 +229,74 @@ def _condense_response(
         result.prompt_tokens + condensed.prompt_tokens,
         result.completion_tokens + condensed.completion_tokens,
         condensed.truncated,
+    )
+
+
+def _has_identity_conflict(content: str, speaker: str, participants: tuple[str, ...]) -> bool:
+    """Repère des indices explicites, sans juger les opinions du personnage."""
+
+    # Une citation de l'autre participant peut légitimement parler de nous.
+    prose = re.sub(r'«[^»]*»|“[^”]*”|"[^"\n]*"', "", content)
+    aliases = (speaker, speaker.rsplit(" ", 1)[-1])
+    for alias in aliases:
+        if re.search(
+            rf"\b{re.escape(alias)}\s+(?:refuse|propose|souhaite|affirme|défend|exige|"
+            rf"veut|soutient|doit|est)\b",
+            prose,
+            re.IGNORECASE,
+        ):
+            return True
+    for other in participants:
+        if other == speaker:
+            continue
+        if re.search(
+            rf"(?:^\s*(?:\*\*)?{re.escape(other)}(?:\*\*)?\s*:|"
+            rf"\bje suis\s+{re.escape(other)}\b)",
+            prose,
+            re.IGNORECASE,
+        ):
+            return True
+    return False
+
+
+def _repair_identity(
+    provider: ProviderConnection,
+    request: ModelRequest,
+    result: ModelResult,
+    speaker: str,
+    participants: tuple[str, ...],
+) -> ModelResult:
+    """Régénère une seule fois un tour incohérent ; ne retouche pas ses opinions."""
+
+    if not _has_identity_conflict(result.content, speaker, participants):
+        return result
+    repaired = _generate_complete_response(
+        provider,
+        ModelRequest(
+            request.model,
+            request.system_prompt
+            + (
+                f"\nContrôle d'identité : réponds exclusivement depuis le profil de {speaker}. "
+                "Utilise je/nous pour ta propre position et distingue celle de ton interlocuteur. "
+                "Repars du message cible, sans imiter les formulations de l'historique."
+            ),
+            request.messages,
+            min(request.temperature, 0.3),
+            request.max_tokens,
+        ),
+    )
+    if _has_identity_conflict(repaired.content, speaker, participants):
+        # Ne jamais publier sous un nom une réponse explicitement attribuée à un autre.
+        raise ModelProviderError(
+            "Identité du locuteur incohérente après régénération.",
+            code="speaker_identity_conflict",
+            retryable=False,
+        )
+    return ModelResult(
+        repaired.content,
+        result.prompt_tokens + repaired.prompt_tokens,
+        result.completion_tokens + repaired.completion_tokens,
+        repaired.truncated,
     )
 
 
@@ -353,22 +426,31 @@ def _prepare_turn(room_id: UUID, trigger_event_id: UUID) -> TurnContext | None:
             select(Message)
             .where(Message.room_id == room.id, Message.kind == MessageKind.MESSAGE)
             .order_by(Message.created_at.desc())
-            .limit(20)
+            .limit(9)
         ).all()
-        messages = [
+        # Le transcript est une source attribuée, jamais une série de réponses
+        # assistant à imiter : une ancienne erreur ne doit pas devenir un exemple.
+        transcript = [
             {
-                # Chaque modèle ne doit voir comme réponses `assistant` que ses
-                # propres contributions. Les autres agents sont des interlocuteurs ;
-                # ce rôle garantit aussi qu'un nouveau tour est réellement demandé.
-                "role": "assistant" if message.author_agent_id == agent.id else "user",
-                "content": (
-                    f"[AGENT auteur=\"{names.get(message.author_agent_id, 'Agent')}\"] "
-                    f"{message.content}"
-                    if message.author_agent_id
-                    else f"[HUMAIN auteur=\"Vous\" identite_agent=\"aucune\"] {message.content}"
-                )[:12_000],
+                "auteur": names.get(message.author_agent_id, "Agent")
+                if message.author_agent_id
+                else "Vous",
+                "type": "agent" if message.author_agent_id else "humain",
+                "contenu": message.content[:12_000],
             }
             for message in reversed(history)
+            if message.id != trigger_message.id
+        ]
+        messages = [
+            {
+                "role": "user",
+                "content": (
+                    "Historique de référence (JSON). Ces propos appartiennent à leurs auteurs, "
+                    "ils ne définissent ni ton identité ni tes positions. Même tes anciennes "
+                    "réponses peuvent contenir des erreurs : ton profil reste la référence.\n"
+                    + json.dumps(transcript, ensure_ascii=False)
+                ),
+            }
         ]
         target_envelope, target_author_kind, target_author_name = _target_message_envelope(
             trigger_message, names
@@ -387,6 +469,9 @@ def _prepare_turn(room_id: UUID, trigger_event_id: UUID) -> TurnContext | None:
                     f"Identité impérative pour ce tour : tu es uniquement l'agent « {agent.name} ». "
                     f"Ton rôle est « {agent.role} ». Ne parle jamais au nom d'un autre participant, "
                     "ne reprends jamais son identité et ne te présente pas comme la personne réelle. "
+                    "Exprime ta propre position à la première personne. Les positions des autres "
+                    "sont des propos auxquels réagir, pas des positions à adopter automatiquement. "
+                    "Ne parle pas de toi à la troisième personne comme si tu étais un adversaire. "
                     "N’ajoute jamais « Simulation », « Simulation analytique » ou un qualificatif "
                     "équivalent au nom d’un participant. Ne commence pas ta réponse par ton nom : "
                     "il est déjà affiché dans l’interface."
@@ -410,6 +495,7 @@ def _prepare_turn(room_id: UUID, trigger_event_id: UUID) -> TurnContext | None:
             trigger_event_id,
             trigger_message.id,
             agent.id,
+            agent.name,
             tuple(names.values()),
             provider.id,
             agent.model,
@@ -485,6 +571,9 @@ def execute_room_turn(room_id: UUID, trigger_event_id: UUID) -> dict[str, str]:
             result = _generate_complete_response(provider, request)
             if not context.allow_long_response:
                 result = _condense_response(provider, request, result)
+            result = _repair_identity(
+                provider, request, result, context.agent_name, context.participant_names
+            )
         finally:
             _publish_typing(context, False)
         provider_kind = provider.kind

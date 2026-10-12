@@ -27,6 +27,8 @@ from api.services.orchestration import (
     _clean_generated_content,
     _condense_response,
     _generate_complete_response,
+    _has_identity_conflict,
+    _repair_identity,
     execute_room_turn,
     record_room_failure,
 )
@@ -126,14 +128,13 @@ def test_local_turn_is_idempotent_and_accounts_for_tokens(
     assert "Ne parle jamais au nom d'un autre participant" in requests[0].system_prompt
     assert "tu es uniquement l'agent « Mini A »" in requests[1].system_prompt
     assert requests[0].messages[-2]["role"] == "user"
-    assert requests[0].messages[-2]["content"].startswith(
-        '[HUMAIN auteur="Vous" identite_agent="aucune"]'
-    )
+    assert "Historique de référence" in requests[0].messages[-2]["content"]
+    assert all(message["role"] == "user" for message in requests[0].messages)
     assert "type_auteur=humain" in requests[0].messages[-1]["content"]
     assert "auteur_affiche=Vous" in requests[0].messages[-1]["content"]
     assert "dernier message vient de l’utilisateur humain" in requests[0].system_prompt
     assert requests[1].messages[-2]["role"] == "user"
-    assert requests[1].messages[-2]["content"].startswith('[AGENT auteur="Mini B"]')
+    assert '"auteur": "Vous"' in requests[1].messages[-2]["content"]
     assert "type_auteur=agent" in requests[1].messages[-1]["content"]
     assert "auteur_affiche=Mini B" in requests[1].messages[-1]["content"]
     assert "dernier message vient de l’agent « Mini B »" in requests[1].system_prompt
@@ -162,18 +163,18 @@ def test_local_turn_is_idempotent_and_accounts_for_tokens(
             message_response.json()["id"]
         )
         assert generated_by_agent[UUID(agents[0]["id"])].reply_to_id == UUID(result["messageId"])
-        assert generated_by_agent[UUID(agents[1]["id"])].metadata_json[
-            "replyToAuthorKind"
-        ] == "humain"
-        assert generated_by_agent[UUID(agents[1]["id"])].metadata_json[
-            "replyToAuthorName"
-        ] == "Vous"
-        assert generated_by_agent[UUID(agents[0]["id"])].metadata_json[
-            "replyToAuthorKind"
-        ] == "agent"
-        assert generated_by_agent[UUID(agents[0]["id"])].metadata_json[
-            "replyToAuthorName"
-        ] == "Mini B"
+        assert (
+            generated_by_agent[UUID(agents[1]["id"])].metadata_json["replyToAuthorKind"] == "humain"
+        )
+        assert (
+            generated_by_agent[UUID(agents[1]["id"])].metadata_json["replyToAuthorName"] == "Vous"
+        )
+        assert (
+            generated_by_agent[UUID(agents[0]["id"])].metadata_json["replyToAuthorKind"] == "agent"
+        )
+        assert (
+            generated_by_agent[UUID(agents[0]["id"])].metadata_json["replyToAuthorName"] == "Mini B"
+        )
         reactions = db.scalars(
             select(MessageReaction).where(MessageReaction.agent_id.is_not(None))
         ).all()
@@ -333,6 +334,8 @@ def test_long_response_is_rewritten_instead_of_cut(monkeypatch) -> None:
 
     def fake_generation(provider, request: ModelRequest) -> ModelResult:
         assert request.max_tokens == 512
+        assert request.system_prompt.startswith("Profil de Poutine")
+        assert request.messages[0]["content"] == "Question"
         return ModelResult("Réponse concise avec une proposition concrète.", 15, 8)
 
     monkeypatch.setattr("api.services.orchestration.generate_model_response", fake_generation)
@@ -341,7 +344,7 @@ def test_long_response_is_rewritten_instead_of_cut(monkeypatch) -> None:
 
     result = _condense_response(
         provider,
-        ModelRequest("qwen3.5:4b", "Réponds.", [{"role": "user", "content": "Question"}]),
+        ModelRequest("qwen3.5:4b", "Profil de Poutine", [{"role": "user", "content": "Question"}]),
         original,
     )
 
@@ -458,10 +461,9 @@ def test_autonomous_chain_continues_beyond_previous_limit(monkeypatch) -> None:
     )
     monkeypatch.setattr(
         "api.tasks.schedule_room_turn",
-        lambda current_room_id, event_id, *, countdown=0, force=False: scheduled.append(
-            (current_room_id, event_id, countdown)
-        )
-        or True,
+        lambda current_room_id, event_id, *, countdown=0, force=False: (
+            scheduled.append((current_room_id, event_id, countdown)) or True
+        ),
     )
 
     result = continue_room_turn.run(str(room_id), str(uuid4()))
@@ -537,3 +539,45 @@ def test_provider_diagnostic_refreshes_discovered_models(
     ]
     refreshed = next(item for item in items if item["id"] == provider["id"])
     assert refreshed["models"] == ["qwen3.5:4b"]
+
+
+@pytest.mark.parametrize(
+    "content,conflict",
+    [
+        ("Les faits montrent que Poutine refuse d'évacuer.", True),
+        ("Emmanuel Macron : Je propose un accord.", True),
+        ("Je suis Emmanuel Macron et je propose un accord.", True),
+        ("Macron propose des garanties. Je défends notre sécurité.", False),
+        ("Vous dites « Poutine refuse ». Je conteste cette lecture.", False),
+    ],
+)
+def test_speaker_identity_conflict(content: str, conflict: bool) -> None:
+    assert (
+        _has_identity_conflict(content, "Vladimir Poutine", ("Vladimir Poutine", "Emmanuel Macron"))
+        is conflict
+    )
+
+
+def test_identity_repair_is_bounded_and_counts_tokens(monkeypatch) -> None:
+    provider = ProviderConnection(kind=ProviderKind.LOCAL, base_url="http://ollama.test:11434")
+    request = ModelRequest("mini", "Profil russe", [{"role": "user", "content": "Cible"}])
+    original = ModelResult("Poutine refuse d'évacuer.", 12, 8)
+    calls = []
+
+    def generate(provider, repaired_request):
+        calls.append(repaired_request)
+        assert repaired_request.messages == request.messages
+        assert repaired_request.system_prompt.startswith(request.system_prompt)
+        return ModelResult("Je souhaite discuter des garanties de sécurité.", 10, 9)
+
+    monkeypatch.setattr("api.services.orchestration.generate_model_response", generate)
+    result = _repair_identity(provider, request, original, "Vladimir Poutine", ())
+    assert len(calls) == 1
+    assert (result.prompt_tokens, result.completion_tokens) == (22, 17)
+    assert _repair_identity(provider, request, result, "Vladimir Poutine", ()) is result
+    assert len(calls) == 1
+    monkeypatch.setattr("api.services.orchestration.generate_model_response", lambda *_: original)
+    with pytest.raises(ModelProviderError) as error:
+        _repair_identity(provider, request, original, "Vladimir Poutine", ())
+    assert error.value.code == "speaker_identity_conflict"
+    assert error.value.retryable is False
