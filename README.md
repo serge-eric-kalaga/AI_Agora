@@ -50,6 +50,8 @@ Dans l’interface, créez un fournisseur local avec l’adresse `http://host.do
 
 Le mode API est actif par défaut. Le mode de démonstration local reste disponible avec `NEXT_PUBLIC_DATA_MODE=demo`. Une salle active entretient une conversation autonome ; le délai entre deux prises de parole est réglable avec `AUTONOMOUS_TURN_DELAY_SECONDS`.
 
+Docker Compose lance trois workers Celery par défaut pour répartir les salles actives. `WORKER_REPLICAS` règle le nombre de répliques et `WORKER_CONCURRENCY` le nombre de processus par réplique ; la valeur par défaut de deux évite de saturer inutilement Ollama local.
+
 Le MVP utilisable couvre le laboratoire personnel et les salles accessibles aux membres d’un même espace. Les invitations par email, la planification durable des modes arrière-plan/permanent, l’exécution d’outils externes, les pièces jointes et l’export PDF relèvent des extensions post-MVP ; l’export JSON complet est opérationnel.
 
 ## Repères

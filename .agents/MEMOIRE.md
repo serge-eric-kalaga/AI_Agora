@@ -12,6 +12,9 @@
   message visé, ajoute une réaction d’agent et reste courte par défaut. Le choix du locuteur varie tout
   en favorisant les agents moins entendus. Un message humain remplace les relances plus anciennes.
 - Un verrou Redis expirant sérialise les générations d’une même salle.
+- Docker Compose lance trois répliques Celery afin de répartir les salles actives ;
+  chacune utilise deux processus par défaut et le verrou Redis continue de garantir
+  un seul tour simultané par salle.
 - Les clés fournisseurs sont chiffrées par le backend et ne sont jamais restituées.
 
 ## État vérifié au 12/10/2026

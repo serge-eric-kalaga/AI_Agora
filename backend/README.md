@@ -103,6 +103,10 @@ remplace toute ancienne relance planifiée afin de conserver un seul fil actif. 
 échec final après retries devient un message système et un événement `agent.failed`.
 Un verrou Redis par salle, expirant après `ROOM_TURN_LOCK_SECONDS`, empêche deux
 workers de générer simultanément des réponses concurrentes dans une même conversation.
+Docker Compose démarre trois répliques Celery par défaut, configurables avec
+`WORKER_REPLICAS`, afin que plusieurs salles puissent progresser en parallèle.
+Chaque réplique utilise deux processus par défaut, réglables avec
+`WORKER_CONCURRENCY`, pour préserver les ressources du fournisseur local.
 
 Pour joindre un Ollama déjà lancé sur la machine hôte depuis Docker, configurez
 le fournisseur avec `http://host.docker.internal:11434`. Sans Docker, utilisez
