@@ -33,6 +33,7 @@ test('desktop visual inspection and participant changes preserve conversation hi
   await page.getByRole('dialog').getByRole('combobox').selectOption('orion');
   await page.getByRole('button', { name: 'Ajouter', exact: true }).click();
   await expect(page.locator('.room-inspector .participant')).toHaveCount(4);
+  await page.getByRole('button', { name: 'Reprendre', exact: true }).click();
   await page.getByRole('button', { name: 'Répondre Nova' }).click();
   await page
     .getByRole('textbox', { name: /Partagez une idée/ })

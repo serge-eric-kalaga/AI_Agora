@@ -47,6 +47,7 @@ test('agent, room, conversation and persistence form a complete local workflow',
   await expect(
     page.getByRole('heading', { name: 'Atelier de test', exact: true, level: 1 }),
   ).toBeVisible();
+  await page.getByRole('button', { name: 'Reprendre', exact: true }).click();
   await page
     .getByRole('textbox', { name: /Partagez une idée/ })
     .fill('@Ariane Bonjour **à toutes et tous**');
@@ -56,7 +57,6 @@ test('agent, room, conversation and persistence form a complete local workflow',
   await expect(
     page.getByRole('button', { name: 'Réagir au message 👍', exact: true }),
   ).toHaveAttribute('aria-pressed', 'true');
-  await page.getByRole('button', { name: 'Reprendre', exact: true }).click();
   await page.getByRole('button', { name: 'Simuler une réponse' }).click();
   await expect(page.locator('.message')).toHaveCount(2);
   await page.getByRole('button', { name: 'Mettre en pause', exact: true }).click();
