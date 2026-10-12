@@ -66,6 +66,12 @@ fournisseurs avec Fernet et devient obligatoire en production. Elles ne doivent
 jamais être commitées. En production, exécuter `alembic upgrade head` dans une
 étape de déploiement unique avant de répliquer l'API.
 
+Pour un déploiement HTTPS, configurez `APP_ENVIRONMENT=production`,
+`AGORA_COOKIE_SECURE=true` et `ALLOW_PRIVATE_PROVIDER_ENDPOINTS=false`. Le
+backend refuse de démarrer si le secret JWT est faible, si la clé Fernet est
+absente ou invalide, si CORS accepte `*`, ou si les endpoints privés restent
+autorisés.
+
 ## Contrat API
 
 Toutes les réponses utilisent le camelCase. Une erreur suit ce format stable :

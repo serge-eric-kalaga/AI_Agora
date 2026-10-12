@@ -35,13 +35,13 @@ services:
       context: ./backend
     restart: unless-stopped
     environment: &backend_environment
-      APP_ENVIRONMENT: development
+      APP_ENVIRONMENT: ${APP_ENVIRONMENT:-development}
       DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-ai_agora}:${POSTGRES_PASSWORD:-ai_agora_dev}@postgres:5432/${POSTGRES_DB:-ai_agora}
       REDIS_URL: redis://redis:6379/0
-      JWT_SECRET: ${JWT_SECRET:-change-this-development-secret}
+      JWT_SECRET: ${JWT_SECRET:-change-this-development-secret-with-32-bytes}
       CREDENTIAL_ENCRYPTION_KEY: ${CREDENTIAL_ENCRYPTION_KEY:-}
       FRONTEND_ORIGINS: '${FRONTEND_ORIGINS:-["http://localhost:3000","http://127.0.0.1:3000"]}'
-      ALLOW_PRIVATE_PROVIDER_ENDPOINTS: "true"
+      ALLOW_PRIVATE_PROVIDER_ENDPOINTS: ${ALLOW_PRIVATE_PROVIDER_ENDPOINTS:-true}
       MAX_AGENT_TURNS_PER_TRIGGER: ${MAX_AGENT_TURNS_PER_TRIGGER:-3}
       ROOM_TURN_LOCK_SECONDS: ${ROOM_TURN_LOCK_SECONDS:-180}
       RUN_MIGRATIONS: "true"
@@ -85,6 +85,7 @@ services:
     restart: unless-stopped
     environment:
       AGORA_API_INTERNAL_URL: http://backend:8000/api/v1
+      AGORA_COOKIE_SECURE: ${AGORA_COOKIE_SECURE:-false}
     depends_on:
       backend:
         condition: service_healthy

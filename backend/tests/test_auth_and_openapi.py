@@ -1,6 +1,10 @@
 """Contrats d'authentification et qualité de la documentation OpenAPI."""
 
+import pytest
+from cryptography.fernet import Fernet
 from fastapi.testclient import TestClient
+
+from api.configs import Settings
 
 
 def test_registration_login_and_protected_profile(client: TestClient) -> None:
@@ -45,3 +49,21 @@ def test_openapi_exposes_documented_business_contracts(client: TestClient) -> No
     create_room = schema["paths"]["/api/v1/workspaces/{workspace_id}/rooms"]["post"]
     assert "idempotente" in create_room["summary"]
     assert any(parameter["name"] == "X-Idempotency-Key" for parameter in create_room["parameters"])
+
+
+def test_production_rejects_weak_or_unsafe_configuration() -> None:
+    key = Fernet.generate_key().decode()
+    with pytest.raises(ValueError, match="32 octets"):
+        Settings(
+            app_environment="production",
+            jwt_secret="trop-court",
+            credential_encryption_key=key,
+            allow_private_provider_endpoints=False,
+        ).validate_runtime()
+    with pytest.raises(ValueError, match="désactivé"):
+        Settings(
+            app_environment="production",
+            jwt_secret="a" * 48,
+            credential_encryption_key=key,
+            allow_private_provider_endpoints=True,
+        ).validate_runtime()
