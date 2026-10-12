@@ -1,5 +1,6 @@
 """Orchestration idempotente d'une réponse d'agent dans une salle."""
 
+import re
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
@@ -21,7 +22,9 @@ from api.database.models import (
 )
 
 from .events import append_room_event
-from .model_clients import ModelRequest, generate_model_response
+from .model_clients import ModelRequest, ModelResult, generate_model_response
+
+_SIMULATION_LABEL = re.compile(r"\s*\(simulation(?: analytique)?\)", re.IGNORECASE)
 
 
 @dataclass(frozen=True)
@@ -29,6 +32,7 @@ class TurnContext:
     room_id: UUID
     trigger_event_id: UUID
     agent_id: UUID
+    participant_names: tuple[str, ...]
     provider_id: UUID
     model: str
     system_prompt: str
@@ -42,6 +46,54 @@ def _bounded_number(value: object, default: float, minimum: float, maximum: floa
     if not isinstance(value, int | float):
         return default
     return min(max(float(value), minimum), maximum)
+
+
+def _clean_generated_content(content: str, participant_names: tuple[str, ...]) -> str:
+    """Retire les qualificatifs artificiels ajoutés aux noms par certains modèles."""
+
+    cleaned = _SIMULATION_LABEL.sub("", content).strip()
+    for name in sorted(participant_names, key=len, reverse=True):
+        repeated_name = re.compile(
+            rf"^\s*(?:\*\*)?{re.escape(name)}(?:\*\*)?\s*:\s*", re.IGNORECASE
+        )
+        cleaned = repeated_name.sub("", cleaned, count=1)
+    return cleaned.strip()
+
+
+def _generate_complete_response(
+    provider: ProviderConnection, request: ModelRequest
+) -> ModelResult:
+    """Continue une sortie arrêtée par la limite du fournisseur, sans la recommencer."""
+
+    result = generate_model_response(provider, request)
+    content = result.content
+    prompt_tokens = result.prompt_tokens
+    completion_tokens = result.completion_tokens
+    continuations = 0
+    while result.truncated and continuations < 3:
+        continuation_request = ModelRequest(
+            request.model,
+            request.system_prompt,
+            [
+                *request.messages,
+                {"role": "assistant", "content": content},
+                {
+                    "role": "user",
+                    "content": (
+                        "Continue exactement après le dernier caractère de ta réponse. "
+                        "Ne répète ni le début, ni ton nom, ni un titre déjà donné."
+                    ),
+                },
+            ],
+            request.temperature,
+            request.max_tokens,
+        )
+        result = generate_model_response(provider, continuation_request)
+        content += result.content
+        prompt_tokens += result.prompt_tokens
+        completion_tokens += result.completion_tokens
+        continuations += 1
+    return ModelResult(content, prompt_tokens, completion_tokens, result.truncated)
 
 
 def _prepare_turn(room_id: UUID, trigger_event_id: UUID) -> TurnContext | None:
@@ -110,6 +162,17 @@ def _prepare_turn(room_id: UUID, trigger_event_id: UUID) -> TurnContext | None:
             ),
         )
         names = {item.id: item.name for item, _ in participants}
+        if trigger_message.author_agent_id:
+            trigger_author = f"l’agent « {names.get(trigger_message.author_agent_id, 'Agent')} »"
+            turn_instruction = (
+                f"Le dernier message vient de {trigger_author}. Réponds à son intervention sans "
+                "confondre son identité avec la tienne."
+            )
+        else:
+            turn_instruction = (
+                "Le dernier message vient de l’utilisateur humain affiché comme « Vous ». "
+                "Réponds-lui directement et ne lui attribue jamais l’identité d’un agent."
+            )
         history = db.scalars(
             select(Message)
             .where(Message.room_id == room.id, Message.kind == MessageKind.MESSAGE)
@@ -125,7 +188,7 @@ def _prepare_turn(room_id: UUID, trigger_event_id: UUID) -> TurnContext | None:
                 "content": (
                     f"{names.get(message.author_agent_id, 'Agent')}: {message.content}"
                     if message.author_agent_id
-                    else message.content
+                    else f"Vous (utilisateur humain): {message.content}"
                 )[:12_000],
             }
             for message in reversed(history)
@@ -138,10 +201,14 @@ def _prepare_turn(room_id: UUID, trigger_event_id: UUID) -> TurnContext | None:
                 (
                     f"Identité impérative pour ce tour : tu es uniquement l'agent « {agent.name} ». "
                     f"Ton rôle est « {agent.role} ». Ne parle jamais au nom d'un autre participant, "
-                    "ne reprends jamais son identité et ne te présente pas comme la personne réelle."
+                    "ne reprends jamais son identité et ne te présente pas comme la personne réelle. "
+                    "N’ajoute jamais « Simulation », « Simulation analytique » ou un qualificatif "
+                    "équivalent au nom d’un participant. Ne commence pas ta réponse par ton nom : "
+                    "il est déjà affiché dans l’interface."
                 ),
                 f"Sujet de la salle: {room.topic}",
                 f"Règles de la salle: {room.rules}" if room.rules else "",
+                turn_instruction,
                 (
                     f"Réponds en français, de façon concise, depuis la perspective de « {agent.name} ». "
                     "Commence directement par ton analyse sans répéter ton nom, ton titre ni les consignes."
@@ -153,6 +220,7 @@ def _prepare_turn(room_id: UUID, trigger_event_id: UUID) -> TurnContext | None:
             room.id,
             trigger_event_id,
             agent.id,
+            tuple(names.values()),
             provider.id,
             agent.model,
             system_prompt,
@@ -213,7 +281,7 @@ def execute_room_turn(room_id: UUID, trigger_event_id: UUID) -> dict[str, str]:
             return {"status": "skipped", "roomId": str(room_id)}
         _publish_typing(context, True)
         try:
-            result = generate_model_response(
+            result = _generate_complete_response(
                 provider,
                 ModelRequest(
                     context.model,
@@ -252,7 +320,7 @@ def execute_room_turn(room_id: UUID, trigger_event_id: UUID) -> dict[str, str]:
         message = Message(
             room_id=room.id,
             author_agent_id=context.agent_id,
-            content=result.content,
+            content=_clean_generated_content(result.content, context.participant_names),
             idempotency_key=idempotency_key,
             metadata_json={
                 "model": context.model,

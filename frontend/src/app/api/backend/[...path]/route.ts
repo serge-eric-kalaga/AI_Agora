@@ -22,9 +22,11 @@ async function proxy(request: Request, context: { params: Promise<{ path: string
   const contentType = request.headers.get('content-type');
   const idempotencyKey = request.headers.get('x-idempotency-key');
   const lastEventId = request.headers.get('last-event-id');
+  const acceptsEvents = path.at(-1) === 'stream';
   if (contentType) headers.set('content-type', contentType);
   if (idempotencyKey) headers.set('x-idempotency-key', idempotencyKey);
   if (lastEventId) headers.set('last-event-id', lastEventId);
+  if (acceptsEvents) headers.set('accept', 'text/event-stream');
   const method = request.method;
   const body = method === 'GET' || method === 'HEAD' ? undefined : await request.arrayBuffer();
   const response = await backendFetch(`${path.join('/')}${source.search}`, {

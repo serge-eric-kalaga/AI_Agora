@@ -372,9 +372,11 @@ export function subscribeRoom(
   cursor: string,
   onEvent: (event: { cursor: string; type: string; agentId?: string }) => void,
 ) {
-  const source = new EventSource(
-    `/api/backend/workspaces/${workspaceId}/rooms/${roomId}/stream?cursor=${encodeURIComponent(cursor)}`,
-  );
+  let source: EventSource | null = null;
+  let currentCursor = cursor;
+  let lastActivity = Date.now();
+  let reconnectTimer: number | undefined;
+  let stopped = false;
   const eventTypes = [
     'room.created',
     'room.running',
@@ -388,19 +390,61 @@ export function subscribeRoom(
     'agent.typing',
     'agent.idle',
   ];
-  const listener = (event: Event) => {
-    const message = event as MessageEvent;
-    let agentId: string | undefined;
-    try {
-      const data = JSON.parse(message.data) as { payload?: { agentId?: string } };
-      agentId = data.payload?.agentId;
-    } catch {
-      // Un événement métier reste exploitable même si sa charge utile est absente.
-    }
-    onEvent({ cursor: message.lastEventId || cursor, type: event.type, agentId });
+
+  const scheduleReconnect = () => {
+    if (stopped || reconnectTimer !== undefined) return;
+    source?.close();
+    source = null;
+    reconnectTimer = window.setTimeout(() => {
+      reconnectTimer = undefined;
+      connect();
+    }, 1_500);
   };
-  eventTypes.forEach((type) => source.addEventListener(type, listener));
-  return () => source.close();
+
+  const connect = () => {
+    if (stopped) return;
+    const candidate = new EventSource(
+      `/api/backend/workspaces/${workspaceId}/rooms/${roomId}/stream?cursor=${encodeURIComponent(currentCursor)}`,
+    );
+    source = candidate;
+    candidate.onopen = () => {
+      lastActivity = Date.now();
+    };
+    candidate.addEventListener('heartbeat', () => {
+      lastActivity = Date.now();
+    });
+    const listener = (event: Event) => {
+      const message = event as MessageEvent;
+      lastActivity = Date.now();
+      currentCursor = message.lastEventId || currentCursor;
+      let agentId: string | undefined;
+      try {
+        const data = JSON.parse(message.data) as { payload?: { agentId?: string } };
+        agentId = data.payload?.agentId;
+      } catch {
+        // Un événement métier reste exploitable même si sa charge utile est absente.
+      }
+      onEvent({ cursor: currentCursor, type: event.type, agentId });
+    };
+    eventTypes.forEach((type) => candidate.addEventListener(type, listener));
+    candidate.onerror = () => {
+      if (source === candidate) scheduleReconnect();
+    };
+  };
+
+  connect();
+  const watchdog = window.setInterval(() => {
+    if (Date.now() - lastActivity > 45_000) {
+      scheduleReconnect();
+    }
+  }, 15_000);
+
+  return () => {
+    stopped = true;
+    source?.close();
+    if (reconnectTimer !== undefined) window.clearTimeout(reconnectTimer);
+    window.clearInterval(watchdog);
+  };
 }
 
 export async function persistProvider(

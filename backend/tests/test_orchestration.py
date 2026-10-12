@@ -22,7 +22,11 @@ from api.services.model_clients import (
     ModelResult,
     generate_model_response,
 )
-from api.services.orchestration import execute_room_turn, record_room_failure
+from api.services.orchestration import (
+    _generate_complete_response,
+    execute_room_turn,
+    record_room_failure,
+)
 from api.tasks import RoomTurnBusy, _execute_with_room_lock
 
 
@@ -95,7 +99,7 @@ def test_local_turn_is_idempotent_and_accounts_for_tokens(
 
     def fake_generation(provider, request: ModelRequest) -> ModelResult:
         requests.append(request)
-        return ModelResult("Je recommande de sécuriser le flux temps réel.", 30, 12)
+        return ModelResult("Mini B (Simulation) recommande de sécuriser le flux temps réel.", 30, 12)
 
     monkeypatch.setattr("api.services.orchestration.generate_model_response", fake_generation)
 
@@ -110,8 +114,11 @@ def test_local_turn_is_idempotent_and_accounts_for_tokens(
     assert "Ne parle jamais au nom d'un autre participant" in requests[0].system_prompt
     assert "tu es uniquement l'agent « Mini A »" in requests[1].system_prompt
     assert requests[0].messages[-1]["role"] == "user"
+    assert requests[0].messages[-1]["content"].startswith("Vous (utilisateur humain):")
+    assert "dernier message vient de l’utilisateur humain" in requests[0].system_prompt
     assert requests[1].messages[-1]["role"] == "user"
     assert requests[1].messages[-1]["content"].startswith("Mini B:")
+    assert "dernier message vient de l’agent « Mini B »" in requests[1].system_prompt
     with SessionLocal() as db:
         stored_room = db.get(Room, UUID(room["id"]))
         agent_messages = db.scalar(
@@ -126,6 +133,10 @@ def test_local_turn_is_idempotent_and_accounts_for_tokens(
                 Message.room_id == UUID(room["id"]), Message.author_agent_id.is_not(None)
             )
         ).all()
+        assert all("(Simulation)" not in message.content for message in generated)
+        assert all(
+            not message.content.startswith(("Mini A:", "Mini B:")) for message in generated
+        )
         assert {str(message.author_agent_id) for message in generated} == {
             agents[0]["id"],
             agents[1]["id"],
@@ -166,6 +177,7 @@ def test_ollama_request_disables_hidden_reasoning(monkeypatch) -> None:
                 "message": {"content": "Réponse locale"},
                 "prompt_eval_count": 8,
                 "eval_count": 3,
+                "done_reason": "length",
             }
 
     class FakeClient:
@@ -193,9 +205,38 @@ def test_ollama_request_disables_hidden_reasoning(monkeypatch) -> None:
     )
 
     assert result.content == "Réponse locale"
+    assert result.truncated is True
     payload = captured["json"]
     assert isinstance(payload, dict)
     assert payload["think"] is False
+
+
+def test_truncated_response_is_continued_without_repeating(monkeypatch) -> None:
+    results = iter(
+        [
+            ModelResult("Une réponse qui se pour", 10, 5, True),
+            ModelResult("suit jusqu’à sa conclusion.", 12, 6, False),
+        ]
+    )
+    requests: list[ModelRequest] = []
+
+    def fake_generation(provider, request: ModelRequest) -> ModelResult:
+        requests.append(request)
+        return next(results)
+
+    monkeypatch.setattr("api.services.orchestration.generate_model_response", fake_generation)
+    provider = ProviderConnection(kind=ProviderKind.LOCAL, base_url="http://ollama.test:11434")
+
+    result = _generate_complete_response(
+        provider,
+        ModelRequest("qwen3.5:4b", "Réponds.", [{"role": "user", "content": "Question"}]),
+    )
+
+    assert result.content == "Une réponse qui se poursuit jusqu’à sa conclusion."
+    assert result.prompt_tokens == 22
+    assert result.completion_tokens == 11
+    assert result.truncated is False
+    assert requests[1].messages[-2]["content"] == "Une réponse qui se pour"
 
 
 def test_empty_ollama_response_is_retryable(monkeypatch) -> None:

@@ -34,6 +34,7 @@ class ModelResult:
     content: str
     prompt_tokens: int
     completion_tokens: int
+    truncated: bool = False
 
 
 def _integer(value: object) -> int:
@@ -104,6 +105,7 @@ def generate_model_response(provider: ProviderConnection, request: ModelRequest)
         content = message.get("content") if isinstance(message, dict) else None
         prompt_tokens = _integer(body.get("prompt_eval_count"))
         completion_tokens = _integer(body.get("eval_count"))
+        truncated = body.get("done_reason") == "length"
     else:
         body = _post(
             provider,
@@ -124,6 +126,7 @@ def generate_model_response(provider: ProviderConnection, request: ModelRequest)
         usage: dict[str, Any] = raw_usage if isinstance(raw_usage, dict) else {}
         prompt_tokens = _integer(usage.get("prompt_tokens"))
         completion_tokens = _integer(usage.get("completion_tokens"))
+        truncated = isinstance(first, dict) and first.get("finish_reason") == "length"
     if not isinstance(content, str) or not content.strip():
         raise ModelProviderError(
             "Le fournisseur IA n'a produit aucun contenu.",
@@ -133,4 +136,4 @@ def generate_model_response(provider: ProviderConnection, request: ModelRequest)
             # bornée est sûre car la persistance du tour est idempotente.
             retryable=True,
         )
-    return ModelResult(content.strip(), prompt_tokens, completion_tokens)
+    return ModelResult(content.strip(), prompt_tokens, completion_tokens, truncated)

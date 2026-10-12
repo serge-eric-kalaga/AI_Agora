@@ -73,6 +73,8 @@ function ChatRoom({ room }: { room: Room }) {
     [agentId, setAgentId] = useState(''),
     [submitting, setSubmitting] = useState(false);
   const end = useRef<HTMLDivElement>(null),
+    messageList = useRef<HTMLDivElement>(null),
+    followsLatest = useRef(true),
     composer = useRef<HTMLTextAreaElement>(null);
   const messages = state.messages.filter((m) => m.roomId === room.id);
   const participants = state.agents.filter((a) => room.agentIds.includes(a.id));
@@ -109,12 +111,14 @@ function ChatRoom({ room }: { room: Room }) {
     return unsubscribe;
   }, [loadRoom, mode, notify, room.id, subscribeRoom]);
   useEffect(() => {
-    end.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    if (followsLatest.current)
+      end.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
   }, [messages.length]);
   async function send(e?: FormEvent) {
     e?.preventDefault();
     const content = text.trim();
     if (!content || room.status !== 'running' || submitting) return;
+    followsLatest.current = true;
     setSubmitting(true);
     try {
       await sendMessage(room.id, content, replyTo?.id);
@@ -352,7 +356,16 @@ function ChatRoom({ room }: { room: Room }) {
             </button>
           </div>
         </div>
-        <div className="message-list" aria-label={t.chat.messages}>
+        <div
+          className="message-list"
+          aria-label={t.chat.messages}
+          ref={messageList}
+          onScroll={() => {
+            const list = messageList.current;
+            if (list)
+              followsLatest.current = list.scrollHeight - list.scrollTop - list.clientHeight < 120;
+          }}
+        >
           <div className="conversation-start">
             <span className="feature-icon tone-violet">
               <MessagesSquare size={24} />

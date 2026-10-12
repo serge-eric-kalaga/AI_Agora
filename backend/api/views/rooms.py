@@ -513,12 +513,18 @@ async def stream_events(
                     last_sequence = event.sequence
             now = asyncio.get_running_loop().time()
             if now - last_heartbeat >= settings.sse_heartbeat_seconds:
-                yield ": heartbeat\n\n"
+                # Un événement nommé permet au navigateur de détecter aussi une
+                # connexion silencieuse, sans déclencher de relecture de la salle.
+                yield "event: heartbeat\ndata: {}\n\n"
                 last_heartbeat = now
             await asyncio.sleep(settings.sse_poll_interval_seconds)
 
     return StreamingResponse(
         generator(),
         media_type="text/event-stream",
-        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+        headers={
+            "Cache-Control": "no-cache, no-transform",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
     )
