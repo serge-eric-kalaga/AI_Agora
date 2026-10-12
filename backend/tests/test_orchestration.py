@@ -24,6 +24,7 @@ from api.services.model_clients import (
     generate_model_response,
 )
 from api.services.orchestration import (
+    _clean_generated_content,
     _condense_response,
     _generate_complete_response,
     execute_room_turn,
@@ -124,11 +125,17 @@ def test_local_turn_is_idempotent_and_accounts_for_tokens(
     assert "tu es uniquement l'agent « Mini B »" in requests[0].system_prompt
     assert "Ne parle jamais au nom d'un autre participant" in requests[0].system_prompt
     assert "tu es uniquement l'agent « Mini A »" in requests[1].system_prompt
-    assert requests[0].messages[-1]["role"] == "user"
-    assert requests[0].messages[-1]["content"].startswith("Vous (utilisateur humain):")
+    assert requests[0].messages[-2]["role"] == "user"
+    assert requests[0].messages[-2]["content"].startswith(
+        '[HUMAIN auteur="Vous" identite_agent="aucune"]'
+    )
+    assert "type_auteur=humain" in requests[0].messages[-1]["content"]
+    assert "auteur_affiche=Vous" in requests[0].messages[-1]["content"]
     assert "dernier message vient de l’utilisateur humain" in requests[0].system_prompt
-    assert requests[1].messages[-1]["role"] == "user"
-    assert requests[1].messages[-1]["content"].startswith("Mini B:")
+    assert requests[1].messages[-2]["role"] == "user"
+    assert requests[1].messages[-2]["content"].startswith('[AGENT auteur="Mini B"]')
+    assert "type_auteur=agent" in requests[1].messages[-1]["content"]
+    assert "auteur_affiche=Mini B" in requests[1].messages[-1]["content"]
     assert "dernier message vient de l’agent « Mini B »" in requests[1].system_prompt
     with SessionLocal() as db:
         stored_room = db.get(Room, UUID(room["id"]))
@@ -155,6 +162,18 @@ def test_local_turn_is_idempotent_and_accounts_for_tokens(
             message_response.json()["id"]
         )
         assert generated_by_agent[UUID(agents[0]["id"])].reply_to_id == UUID(result["messageId"])
+        assert generated_by_agent[UUID(agents[1]["id"])].metadata_json[
+            "replyToAuthorKind"
+        ] == "humain"
+        assert generated_by_agent[UUID(agents[1]["id"])].metadata_json[
+            "replyToAuthorName"
+        ] == "Vous"
+        assert generated_by_agent[UUID(agents[0]["id"])].metadata_json[
+            "replyToAuthorKind"
+        ] == "agent"
+        assert generated_by_agent[UUID(agents[0]["id"])].metadata_json[
+            "replyToAuthorName"
+        ] == "Mini B"
         reactions = db.scalars(
             select(MessageReaction).where(MessageReaction.agent_id.is_not(None))
         ).all()
@@ -252,6 +271,33 @@ def test_ollama_request_disables_hidden_reasoning(monkeypatch) -> None:
     payload = captured["json"]
     assert isinstance(payload, dict)
     assert payload["think"] is False
+
+
+def test_human_is_not_addressed_as_an_agent() -> None:
+    participant_names = ("Volodymyr Zelensky", "Emmanuel Macron")
+
+    cleaned = _clean_generated_content(
+        "Monsieur Zelensky, votre question touche au cœur du sujet.",
+        participant_names,
+        triggered_by_user=True,
+    )
+
+    assert cleaned == "Votre question touche au cœur du sujet."
+    assert (
+        _clean_generated_content(
+            "Monsieur Zelensky, votre proposition mérite une réponse.",
+            participant_names,
+            triggered_by_user=False,
+        )
+        == "Monsieur Zelensky, votre proposition mérite une réponse."
+    )
+    assert (
+        _clean_generated_content(
+            '[AGENT auteur="Emmanuel Macron"] Monsieur Zelensky, répondons clairement.',
+            participant_names,
+        )
+        == "Monsieur Zelensky, répondons clairement."
+    )
 
 
 def test_truncated_response_is_continued_without_repeating(monkeypatch) -> None:

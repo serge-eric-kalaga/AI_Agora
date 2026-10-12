@@ -27,6 +27,9 @@ from .events import append_room_event
 from .model_clients import ModelRequest, ModelResult, generate_model_response
 
 _SIMULATION_LABEL = re.compile(r"\s*\(simulation(?: analytique)?\)", re.IGNORECASE)
+_HISTORY_SPEAKER_LABEL = re.compile(
+    r'^\s*\[(?:AGENT|HUMAIN)\s+[^\]]+\]\s*', re.IGNORECASE
+)
 
 
 @dataclass(frozen=True)
@@ -44,6 +47,9 @@ class TurnContext:
     max_tokens: int
     chain_depth: int
     allow_long_response: bool
+    triggered_by_user: bool
+    target_author_kind: str
+    target_author_name: str
 
 
 def _bounded_number(value: object, default: float, minimum: float, maximum: float) -> float:
@@ -86,15 +92,75 @@ def _initiative_for(trigger_event_id: UUID) -> str:
     return initiatives[trigger_event_id.int % len(initiatives)]
 
 
-def _clean_generated_content(content: str, participant_names: tuple[str, ...]) -> str:
-    """Retire les qualificatifs artificiels ajoutés aux noms par certains modèles."""
+def _target_message_envelope(
+    message: Message, participant_names: dict[UUID, str]
+) -> tuple[dict[str, str], str, str]:
+    """Encode sans ambiguïté l'auteur et le contenu auxquels le tour doit répondre."""
 
-    cleaned = _SIMULATION_LABEL.sub("", content).strip()
+    if message.author_agent_id:
+        author_kind = "agent"
+        author_name = participant_names.get(message.author_agent_id, "Agent")
+        identity_rule = f'Réponds d’abord à l’agent « {author_name} ».'
+    else:
+        author_kind = "humain"
+        author_name = "Vous"
+        identity_rule = (
+            "Réponds d’abord à l’utilisateur humain affiché « Vous ». Cet humain n’est aucun des "
+            "agents de la salle et ne doit recevoir le nom ou le titre d’aucun participant."
+        )
+    envelope = {
+        "role": "user",
+        "content": (
+            "<message_cible>\n"
+            f"type_auteur={author_kind}\n"
+            f"auteur_affiche={author_name}\n"
+            f"message_id={message.id}\n"
+            f"regle_identite={identity_rule}\n"
+            "contenu_exact:\n"
+            f"{message.content[:12_000]}\n"
+            "</message_cible>\n"
+            "Produis maintenant la réponse à ce message cible. Tu peux ensuite inviter un autre "
+            "participant à poursuivre, sans changer l’identité de l’auteur auquel tu réponds."
+        ),
+    }
+    return envelope, author_kind, author_name
+
+
+def _clean_generated_content(
+    content: str,
+    participant_names: tuple[str, ...],
+    *,
+    triggered_by_user: bool = False,
+) -> str:
+    """Retire les noms artificiels et les identités attribuées à tort à l'humain."""
+
+    cleaned = _HISTORY_SPEAKER_LABEL.sub("", content, count=1)
+    cleaned = _SIMULATION_LABEL.sub("", cleaned).strip()
     for name in sorted(participant_names, key=len, reverse=True):
         repeated_name = re.compile(
             rf"^\s*(?:\*\*)?{re.escape(name)}(?:\*\*)?\s*:\s*", re.IGNORECASE
         )
         cleaned = repeated_name.sub("", cleaned, count=1)
+    if triggered_by_user:
+        # Les petits modèles reprennent parfois le nom d'un agent aperçu dans
+        # l'historique pour s'adresser à l'utilisateur pourtant affiché « Vous ».
+        aliases = {
+            alias
+            for name in participant_names
+            for alias in (name, name.rsplit(" ", 1)[-1])
+            if alias
+        }
+        for alias in sorted(aliases, key=len, reverse=True):
+            wrong_salutation = re.compile(
+                rf"^\s*(?:bonjour\s*,?\s*)?"
+                rf"(?:(?:monsieur|madame)(?:\s+le|\s+la)?|président(?:e)?)\s+"
+                rf"{re.escape(alias)}\s*[,;:]\s*",
+                re.IGNORECASE,
+            )
+            without_salutation = wrong_salutation.sub("", cleaned, count=1)
+            if without_salutation != cleaned:
+                cleaned = without_salutation[:1].upper() + without_salutation[1:]
+                break
     return cleaned.strip()
 
 
@@ -279,7 +345,9 @@ def _prepare_turn(room_id: UUID, trigger_event_id: UUID) -> TurnContext | None:
         else:
             turn_instruction = (
                 "Le dernier message vient de l’utilisateur humain affiché comme « Vous ». "
-                "Réponds-lui directement et ne lui attribue jamais l’identité d’un agent."
+                "Cette personne est un interlocuteur externe, distinct de tous les agents de la "
+                "salle. Réponds-lui directement avec « vous », sans l'appeler par le nom ou le titre "
+                "d'un participant, même si ce nom apparaît dans l'historique."
             )
         history = db.scalars(
             select(Message)
@@ -294,13 +362,18 @@ def _prepare_turn(room_id: UUID, trigger_event_id: UUID) -> TurnContext | None:
                 # ce rôle garantit aussi qu'un nouveau tour est réellement demandé.
                 "role": "assistant" if message.author_agent_id == agent.id else "user",
                 "content": (
-                    f"{names.get(message.author_agent_id, 'Agent')}: {message.content}"
+                    f"[AGENT auteur=\"{names.get(message.author_agent_id, 'Agent')}\"] "
+                    f"{message.content}"
                     if message.author_agent_id
-                    else f"Vous (utilisateur humain): {message.content}"
+                    else f"[HUMAIN auteur=\"Vous\" identite_agent=\"aucune\"] {message.content}"
                 )[:12_000],
             }
             for message in reversed(history)
         ]
+        target_envelope, target_author_kind, target_author_name = _target_message_envelope(
+            trigger_message, names
+        )
+        messages.append(target_envelope)
         config = agent.generation_config or {}
         allow_long_response = trigger_message.author_user_id is not None and any(
             marker in trigger_message.content.casefold()
@@ -346,6 +419,9 @@ def _prepare_turn(room_id: UUID, trigger_event_id: UUID) -> TurnContext | None:
             int(_bounded_number(config.get("maxTokens"), 1024, 64, 8_192)),
             chain_depth,
             allow_long_response,
+            trigger_message.author_user_id is not None,
+            target_author_kind,
+            target_author_name,
         )
 
 
@@ -451,7 +527,11 @@ def execute_room_turn(room_id: UUID, trigger_event_id: UUID) -> dict[str, str]:
             room_id=room.id,
             author_agent_id=context.agent_id,
             reply_to_id=context.trigger_message_id,
-            content=_clean_generated_content(result.content, context.participant_names),
+            content=_clean_generated_content(
+                result.content,
+                context.participant_names,
+                triggered_by_user=context.triggered_by_user,
+            ),
             idempotency_key=idempotency_key,
             metadata_json={
                 "model": context.model,
@@ -459,6 +539,8 @@ def execute_room_turn(room_id: UUID, trigger_event_id: UUID) -> dict[str, str]:
                 "promptTokens": result.prompt_tokens,
                 "completionTokens": result.completion_tokens,
                 "cost": str(cost),
+                "replyToAuthorKind": context.target_author_kind,
+                "replyToAuthorName": context.target_author_name,
             },
         )
         db.add(message)

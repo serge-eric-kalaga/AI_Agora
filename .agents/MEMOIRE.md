@@ -11,6 +11,8 @@
 - Une salle active entretient une conversation autonome sans plafond de tours ; chaque réponse cite le
   message visé, ajoute une réaction d’agent et reste courte par défaut. Le choix du locuteur varie tout
   en favorisant les agents moins entendus. Un message humain remplace les relances plus anciennes.
+- Chaque tour transmet au modèle une enveloppe de message cible avec le type et le nom de l’auteur ;
+  la réponse persiste aussi ce destinataire pour empêcher et diagnostiquer les confusions d’identité.
 - Un verrou Redis expirant sérialise les générations d’une même salle.
 - Docker Compose lance trois répliques Celery afin de répartir les salles actives ;
   chacune utilise deux processus par défaut et le verrou Redis continue de garantir
