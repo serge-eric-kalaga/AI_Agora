@@ -137,10 +137,17 @@ def _prepare_turn(room_id: UUID, trigger_event_id: UUID) -> TurnContext | None:
             part
             for part in (
                 agent.system_prompt,
-                f"Rôle: {agent.role}.",
+                (
+                    f"Identité impérative pour ce tour : tu es uniquement l'agent « {agent.name} ». "
+                    f"Ton rôle est « {agent.role} ». Ne parle jamais au nom d'un autre participant, "
+                    "ne reprends jamais son identité et ne te présente pas comme la personne réelle."
+                ),
                 f"Sujet de la salle: {room.topic}",
                 f"Règles de la salle: {room.rules}" if room.rules else "",
-                "Réponds en français, de façon concise, sous le nom de l'agent configuré.",
+                (
+                    f"Réponds en français, de façon concise, depuis la perspective de « {agent.name} ». "
+                    "Commence directement par ton analyse sans répéter ton nom, ton titre ni les consignes."
+                ),
             )
             if part
         )

@@ -106,6 +106,9 @@ def test_local_turn_is_idempotent_and_accounts_for_tokens(
     assert result["status"] == "completed"
     assert followup["status"] == "completed"
     assert replay["status"] == "already_completed"
+    assert "tu es uniquement l'agent « Mini B »" in requests[0].system_prompt
+    assert "Ne parle jamais au nom d'un autre participant" in requests[0].system_prompt
+    assert "tu es uniquement l'agent « Mini A »" in requests[1].system_prompt
     assert requests[0].messages[-1]["role"] == "user"
     assert requests[1].messages[-1]["role"] == "user"
     assert requests[1].messages[-1]["content"].startswith("Mini B:")
