@@ -93,6 +93,7 @@ class ReactionRead(APIModel):
     emoji: str
     count: int
     reacted_by_me: bool
+    agent_ids: list[UUID] = Field(default_factory=list)
 
 
 class MessageRead(APIModel):

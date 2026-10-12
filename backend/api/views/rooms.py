@@ -113,12 +113,16 @@ def _event_read(event: ConversationEvent) -> EventRead:
 
 def _message_read(db: DbSession, message: Message, user_id: UUID) -> MessageRead:
     rows = db.execute(
-        select(MessageReaction.emoji, MessageReaction.user_id).where(
+        select(
+            MessageReaction.emoji,
+            MessageReaction.user_id,
+            MessageReaction.agent_id,
+        ).where(
             MessageReaction.message_id == message.id
         )
     ).all()
-    counts = Counter(emoji for emoji, _ in rows)
-    mine = {emoji for emoji, reaction_user_id in rows if reaction_user_id == user_id}
+    counts = Counter(emoji for emoji, _, _ in rows)
+    mine = {emoji for emoji, reaction_user_id, _ in rows if reaction_user_id == user_id}
     return MessageRead(
         id=message.id,
         room_id=message.room_id,
@@ -129,7 +133,16 @@ def _message_read(db: DbSession, message: Message, user_id: UUID) -> MessageRead
         content=message.content,
         metadata=message.metadata_json,
         reactions=[
-            ReactionRead(emoji=emoji, count=count, reacted_by_me=emoji in mine)
+            ReactionRead(
+                emoji=emoji,
+                count=count,
+                reacted_by_me=emoji in mine,
+                agent_ids=[
+                    reaction_agent_id
+                    for reaction_emoji, _, reaction_agent_id in rows
+                    if reaction_emoji == emoji and reaction_agent_id is not None
+                ],
+            )
             for emoji, count in sorted(counts.items())
         ],
         created_at=message.created_at,

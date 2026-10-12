@@ -8,7 +8,8 @@
 - Les espaces, fournisseurs, agents, salles, messages, réactions et statuts utilisent l’API réelle.
 - Les événements de salle sont suivis par SSE avec reprise du dernier curseur en session.
 - Le worker produit une réponse réelle via Ollama ou une API compatible OpenAI après un message humain.
-- Une intervention déclenche une chaîne bornée de 3 réponses ; les échecs finaux deviennent visibles dans le chat.
+- Une intervention peut faire participer jusqu’à 8 agents ; chaque réponse cite le message visé,
+  ajoute une réaction d’agent et reste courte par défaut. Les échecs finaux deviennent visibles dans le chat.
 - Un verrou Redis expirant sérialise les générations d’une même salle.
 - Les clés fournisseurs sont chiffrées par le backend et ne sont jamais restituées.
 

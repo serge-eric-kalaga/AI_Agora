@@ -121,7 +121,9 @@ def test_secure_provider_and_idempotent_arena_flow(
         json={"present": True},
     )
     assert reaction.status_code == 200, reaction.text
-    assert reaction.json()["reactions"] == [{"emoji": "🎯", "count": 1, "reactedByMe": True}]
+    assert reaction.json()["reactions"] == [
+        {"emoji": "🎯", "count": 1, "reactedByMe": True, "agentIds": []}
+    ]
 
     events = client.get(
         f"/api/v1/workspaces/{workspace_id}/rooms/{room['id']}/events",

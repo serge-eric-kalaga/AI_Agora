@@ -12,6 +12,7 @@ from api.database.models import (
     ConversationEvent,
     Message,
     MessageKind,
+    MessageReaction,
     ProviderConnection,
     ProviderKind,
     Room,
@@ -23,6 +24,7 @@ from api.services.model_clients import (
     generate_model_response,
 )
 from api.services.orchestration import (
+    _condense_response,
     _generate_complete_response,
     execute_room_turn,
     record_room_failure,
@@ -141,6 +143,17 @@ def test_local_turn_is_idempotent_and_accounts_for_tokens(
             agents[0]["id"],
             agents[1]["id"],
         }
+        generated_by_agent = {message.author_agent_id: message for message in generated}
+        assert generated_by_agent[UUID(agents[1]["id"])].reply_to_id == UUID(message_response.json()["id"])
+        assert generated_by_agent[UUID(agents[0]["id"])].reply_to_id == UUID(result["messageId"])
+        reactions = db.scalars(
+            select(MessageReaction).where(MessageReaction.agent_id.is_not(None))
+        ).all()
+        assert len(reactions) == 2
+        assert {reaction.message_id for reaction in reactions} == {
+            UUID(message_response.json()["id"]),
+            UUID(result["messageId"]),
+        }
         assert stored_room.local_tokens == 84
         assert stored_room.cloud_tokens == 0
         assert stored_room.amount_spent == 0
@@ -237,6 +250,28 @@ def test_truncated_response_is_continued_without_repeating(monkeypatch) -> None:
     assert result.completion_tokens == 11
     assert result.truncated is False
     assert requests[1].messages[-2]["content"] == "Une réponse qui se pour"
+
+
+def test_long_response_is_rewritten_instead_of_cut(monkeypatch) -> None:
+    long_content = "mot " * 220
+
+    def fake_generation(provider, request: ModelRequest) -> ModelResult:
+        assert request.max_tokens == 512
+        return ModelResult("Réponse concise avec une proposition concrète.", 15, 8)
+
+    monkeypatch.setattr("api.services.orchestration.generate_model_response", fake_generation)
+    provider = ProviderConnection(kind=ProviderKind.LOCAL, base_url="http://ollama.test:11434")
+    original = ModelResult(long_content.strip(), 20, 220)
+
+    result = _condense_response(
+        provider,
+        ModelRequest("qwen3.5:4b", "Réponds.", [{"role": "user", "content": "Question"}]),
+        original,
+    )
+
+    assert result.content == "Réponse concise avec une proposition concrète."
+    assert result.prompt_tokens == 35
+    assert result.completion_tokens == 228
 
 
 def test_empty_ollama_response_is_retryable(monkeypatch) -> None:

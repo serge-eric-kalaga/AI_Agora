@@ -14,6 +14,7 @@ from api.database.models import (
     ConversationEvent,
     Message,
     MessageKind,
+    MessageReaction,
     ProviderConnection,
     ProviderKind,
     Room,
@@ -31,6 +32,7 @@ _SIMULATION_LABEL = re.compile(r"\s*\(simulation(?: analytique)?\)", re.IGNORECA
 class TurnContext:
     room_id: UUID
     trigger_event_id: UUID
+    trigger_message_id: UUID
     agent_id: UUID
     participant_names: tuple[str, ...]
     provider_id: UUID
@@ -40,12 +42,26 @@ class TurnContext:
     temperature: float
     max_tokens: int
     chain_depth: int
+    allow_long_response: bool
 
 
 def _bounded_number(value: object, default: float, minimum: float, maximum: float) -> float:
     if not isinstance(value, int | float):
         return default
     return min(max(float(value), minimum), maximum)
+
+
+def _reaction_for(content: str) -> str:
+    """Choisit une réaction courte cohérente avec la réponse produite."""
+
+    normalized = content.casefold()
+    if any(word in normalized for word in ("désaccord", "cependant", "réserve", "nuance")):
+        return "🤔"
+    if any(word in normalized for word in ("priorité", "propose", "recommande", "objectif")):
+        return "🎯"
+    if any(word in normalized for word in ("solidarité", "soutien", "courage", "paix")):
+        return "❤️"
+    return "👍"
 
 
 def _clean_generated_content(content: str, participant_names: tuple[str, ...]) -> str:
@@ -94,6 +110,35 @@ def _generate_complete_response(
         completion_tokens += result.completion_tokens
         continuations += 1
     return ModelResult(content, prompt_tokens, completion_tokens, result.truncated)
+
+
+def _condense_response(
+    provider: ProviderConnection, request: ModelRequest, result: ModelResult
+) -> ModelResult:
+    """Réécrit une réponse trop longue au lieu de la couper brutalement."""
+
+    if len(result.content.split()) <= 180:
+        return result
+    condensed = generate_model_response(
+        provider,
+        ModelRequest(
+            request.model,
+            (
+                "Réécris le texte fourni en français, en 100 à 160 mots maximum. "
+                "Conserve l’idée principale, les réserves utiles et une proposition concrète. "
+                "N’ajoute aucun nom, titre, préambule ou commentaire sur la réécriture."
+            ),
+            [{"role": "user", "content": result.content}],
+            min(request.temperature, 0.3),
+            min(request.max_tokens, 512),
+        ),
+    )
+    return ModelResult(
+        condensed.content,
+        result.prompt_tokens + condensed.prompt_tokens,
+        result.completion_tokens + condensed.completion_tokens,
+        condensed.truncated,
+    )
 
 
 def _prepare_turn(room_id: UUID, trigger_event_id: UUID) -> TurnContext | None:
@@ -194,6 +239,10 @@ def _prepare_turn(room_id: UUID, trigger_event_id: UUID) -> TurnContext | None:
             for message in reversed(history)
         ]
         config = agent.generation_config or {}
+        allow_long_response = trigger_message.author_user_id is not None and any(
+            marker in trigger_message.content.casefold()
+            for marker in ("détaill", "developp", "développ", "approfond", "exhaustif")
+        )
         system_prompt = "\n\n".join(
             part
             for part in (
@@ -211,7 +260,11 @@ def _prepare_turn(room_id: UUID, trigger_event_id: UUID) -> TurnContext | None:
                 turn_instruction,
                 (
                     f"Réponds en français, de façon concise, depuis la perspective de « {agent.name} ». "
-                    "Commence directement par ton analyse sans répéter ton nom, ton titre ni les consignes."
+                    "Commence directement par ton analyse sans répéter ton nom, ton titre ni les consignes. "
+                    "Respecte une limite stricte de 160 mots et deux à quatre courts paragraphes. "
+                    "Développe davantage "
+                    "uniquement si l’utilisateur demande explicitement une réponse détaillée ou si la "
+                    "complexité du sujet le rend indispensable."
                 ),
             )
             if part
@@ -219,6 +272,7 @@ def _prepare_turn(room_id: UUID, trigger_event_id: UUID) -> TurnContext | None:
         return TurnContext(
             room.id,
             trigger_event_id,
+            trigger_message.id,
             agent.id,
             tuple(names.values()),
             provider.id,
@@ -228,6 +282,7 @@ def _prepare_turn(room_id: UUID, trigger_event_id: UUID) -> TurnContext | None:
             _bounded_number(config.get("temperature"), 0.7, 0, 2),
             int(_bounded_number(config.get("maxTokens"), 1024, 64, 8_192)),
             chain_depth,
+            allow_long_response,
         )
 
 
@@ -281,16 +336,16 @@ def execute_room_turn(room_id: UUID, trigger_event_id: UUID) -> dict[str, str]:
             return {"status": "skipped", "roomId": str(room_id)}
         _publish_typing(context, True)
         try:
-            result = _generate_complete_response(
-                provider,
-                ModelRequest(
-                    context.model,
-                    context.system_prompt,
-                    context.messages,
-                    context.temperature,
-                    context.max_tokens,
-                ),
+            request = ModelRequest(
+                context.model,
+                context.system_prompt,
+                context.messages,
+                context.temperature,
+                context.max_tokens,
             )
+            result = _generate_complete_response(provider, request)
+            if not context.allow_long_response:
+                result = _condense_response(provider, request, result)
         finally:
             _publish_typing(context, False)
         provider_kind = provider.kind
@@ -320,6 +375,7 @@ def execute_room_turn(room_id: UUID, trigger_event_id: UUID) -> dict[str, str]:
         message = Message(
             room_id=room.id,
             author_agent_id=context.agent_id,
+            reply_to_id=context.trigger_message_id,
             content=_clean_generated_content(result.content, context.participant_names),
             idempotency_key=idempotency_key,
             metadata_json={
@@ -332,6 +388,27 @@ def execute_room_turn(room_id: UUID, trigger_event_id: UUID) -> dict[str, str]:
         )
         db.add(message)
         db.flush()
+        reaction_emoji = _reaction_for(message.content)
+        db.add(
+            MessageReaction(
+                message_id=context.trigger_message_id,
+                agent_id=context.agent_id,
+                emoji=reaction_emoji,
+            )
+        )
+        append_room_event(
+            db,
+            room.id,
+            "reaction.updated",
+            {
+                "messageId": str(context.trigger_message_id),
+                "emoji": reaction_emoji,
+                "present": True,
+                "agentId": str(context.agent_id),
+            },
+            actor_agent_id=context.agent_id,
+            idempotency_key=f"agent-reaction:{trigger_event_id}",
+        )
         total_tokens = result.prompt_tokens + result.completion_tokens
         if provider_kind == ProviderKind.LOCAL:
             room.local_tokens += total_tokens

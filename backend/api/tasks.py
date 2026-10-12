@@ -47,7 +47,7 @@ def _execute_with_room_lock(room_id: UUID, event_id: UUID) -> dict[str, str]:
     max_retries=8,
 )
 def continue_room_turn(self, room_id: str, trigger_event_id: str) -> dict[str, str]:  # type: ignore[no-untyped-def]
-    """Produit une chaîne bornée de réponses avec retries et erreur visible."""
+    """Laisse les participants échanger à tour de rôle avec retries et borne de sécurité."""
 
     room_uuid = UUID(room_id)
     event_uuid = UUID(trigger_event_id)

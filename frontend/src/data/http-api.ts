@@ -91,6 +91,7 @@ const messageReadSchema = z.object({
       emoji: z.string(),
       count: z.number().int().nonnegative(),
       reactedByMe: z.boolean(),
+      agentIds: z.array(z.string()).default([]),
     }),
   ),
   createdAt: z.string(),
@@ -205,7 +206,13 @@ function mapRoom(value: z.infer<typeof roomReadSchema>): Room {
 function mapMessage(value: z.infer<typeof messageReadSchema>): Message {
   const reactions = Object.fromEntries(
     value.reactions.map((reaction) => {
-      const actors = Array.from({ length: reaction.count }, (_, index) => `reaction-${index}`);
+      const actors = [
+        ...reaction.agentIds,
+        ...Array.from(
+          { length: Math.max(0, reaction.count - reaction.agentIds.length) },
+          (_, index) => `reaction-${index}`,
+        ),
+      ];
       if (reaction.reactedByMe && actors.length) actors[0] = 'human';
       return [reaction.emoji, actors];
     }),

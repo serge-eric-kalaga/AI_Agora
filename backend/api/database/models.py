@@ -15,6 +15,7 @@ from typing import Any
 from sqlalchemy import (
     JSON,
     Boolean,
+    CheckConstraint,
     DateTime,
     Enum,
     ForeignKey,
@@ -255,13 +256,26 @@ class Message(Base, TimestampMixin):
 
 class MessageReaction(Base, TimestampMixin):
     __tablename__ = "message_reactions"
-    __table_args__ = (UniqueConstraint("message_id", "user_id", "emoji"),)
+    __table_args__ = (
+        UniqueConstraint("message_id", "user_id", "emoji"),
+        UniqueConstraint("message_id", "agent_id", "emoji"),
+        CheckConstraint(
+            "(user_id IS NOT NULL AND agent_id IS NULL) OR "
+            "(user_id IS NULL AND agent_id IS NOT NULL)",
+            name="ck_message_reaction_single_actor",
+        ),
+    )
 
     id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
     message_id: Mapped[uuid.UUID] = mapped_column(
         ForeignKey("messages.id", ondelete="CASCADE"), index=True
     )
-    user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
+    user_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), nullable=True
+    )
+    agent_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("agent_definitions.id", ondelete="CASCADE"), nullable=True
+    )
     emoji: Mapped[str] = mapped_column(String(16))
 
     message: Mapped[Message] = relationship(back_populates="reactions")
