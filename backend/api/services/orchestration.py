@@ -76,9 +76,7 @@ def _clean_generated_content(content: str, participant_names: tuple[str, ...]) -
     return cleaned.strip()
 
 
-def _generate_complete_response(
-    provider: ProviderConnection, request: ModelRequest
-) -> ModelResult:
+def _generate_complete_response(provider: ProviderConnection, request: ModelRequest) -> ModelResult:
     """Continue une sortie arrêtée par la limite du fournisseur, sans la recommencer."""
 
     result = generate_model_response(provider, request)
@@ -166,13 +164,10 @@ def _prepare_turn(room_id: UUID, trigger_event_id: UUID) -> TurnContext | None:
         started_at = room.started_at
         if started_at and started_at.tzinfo is None:
             started_at = started_at.replace(tzinfo=timezone.utc)
-        if (
-            room.amount_spent >= room.budget_limit
-            or (
-                started_at
-                and datetime.now(timezone.utc) - started_at
-                >= timedelta(minutes=room.max_duration_minutes)
-            )
+        if room.amount_spent >= room.budget_limit or (
+            started_at
+            and datetime.now(timezone.utc) - started_at
+            >= timedelta(minutes=room.max_duration_minutes)
         ):
             return None
         participants = db.execute(
@@ -196,11 +191,30 @@ def _prepare_turn(room_id: UUID, trigger_event_id: UUID) -> TurnContext | None:
         ).all()
         contributions = {agent_id: count for agent_id, count in contribution_rows}
         content = trigger_message.content.casefold()
-        # Une mention explicite prime; sinon l'agent ayant le moins contribué est favorisé.
+        mentioned_agent_ids = {
+            item[0].id for item in participants if f"@{item[0].name.casefold()}" in content
+        }
+        reply_target_id: UUID | None = None
+        if (
+            trigger_message.author_user_id is not None
+            and not mentioned_agent_ids
+            and trigger_message.reply_to_id is not None
+        ):
+            quoted_message = db.get(Message, trigger_message.reply_to_id)
+            participant_ids = {item[0].id for item in participants}
+            if (
+                quoted_message
+                and quoted_message.room_id == room.id
+                and quoted_message.author_agent_id in participant_ids
+            ):
+                reply_target_id = quoted_message.author_agent_id
+
+        # Une mention explicite prime, puis l'agent cité par une réponse humaine.
+        # Sans destinataire, l'agent ayant le moins contribué est favorisé.
         agent, provider = min(
             participants,
             key=lambda item: (
-                0 if f"@{item[0].name.casefold()}" in content else 1,
+                0 if item[0].id in mentioned_agent_ids or item[0].id == reply_target_id else 1,
                 1 if item[0].id == trigger_message.author_agent_id else 0,
                 contributions.get(item[0].id, 0),
                 item[0].name.casefold(),
@@ -359,7 +373,11 @@ def execute_room_turn(room_id: UUID, trigger_event_id: UUID) -> dict[str, str]:
             )
         )
         if existing:
-            return {"status": "already_completed", "roomId": str(room_id), "messageId": str(existing.id)}
+            return {
+                "status": "already_completed",
+                "roomId": str(room_id),
+                "messageId": str(existing.id),
+            }
         if not room or room.status != RoomStatus.RUNNING:
             return {"status": "skipped", "roomId": str(room_id)}
         started_at = room.started_at

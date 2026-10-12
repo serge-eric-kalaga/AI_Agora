@@ -91,17 +91,21 @@ def test_local_turn_is_idempotent_and_accounts_for_tokens(
     assert message_response.status_code == 201, message_response.text
     with SessionLocal() as db:
         event_id = db.scalar(
-            select(ConversationEvent.id).where(
+            select(ConversationEvent.id)
+            .where(
                 ConversationEvent.room_id == UUID(room["id"]),
                 ConversationEvent.event_type == "message.created",
-            ).order_by(ConversationEvent.sequence.desc())
+            )
+            .order_by(ConversationEvent.sequence.desc())
         )
     assert event_id
     requests: list[ModelRequest] = []
 
     def fake_generation(provider, request: ModelRequest) -> ModelResult:
         requests.append(request)
-        return ModelResult("Mini B (Simulation) recommande de sécuriser le flux temps réel.", 30, 12)
+        return ModelResult(
+            "Mini B (Simulation) recommande de sécuriser le flux temps réel.", 30, 12
+        )
 
     monkeypatch.setattr("api.services.orchestration.generate_model_response", fake_generation)
 
@@ -136,15 +140,15 @@ def test_local_turn_is_idempotent_and_accounts_for_tokens(
             )
         ).all()
         assert all("(Simulation)" not in message.content for message in generated)
-        assert all(
-            not message.content.startswith(("Mini A:", "Mini B:")) for message in generated
-        )
+        assert all(not message.content.startswith(("Mini A:", "Mini B:")) for message in generated)
         assert {str(message.author_agent_id) for message in generated} == {
             agents[0]["id"],
             agents[1]["id"],
         }
         generated_by_agent = {message.author_agent_id: message for message in generated}
-        assert generated_by_agent[UUID(agents[1]["id"])].reply_to_id == UUID(message_response.json()["id"])
+        assert generated_by_agent[UUID(agents[1]["id"])].reply_to_id == UUID(
+            message_response.json()["id"]
+        )
         assert generated_by_agent[UUID(agents[0]["id"])].reply_to_id == UUID(result["messageId"])
         reactions = db.scalars(
             select(MessageReaction).where(MessageReaction.agent_id.is_not(None))
@@ -164,6 +168,27 @@ def test_local_turn_is_idempotent_and_accounts_for_tokens(
         ).all()
         assert event_types.count("agent.typing") == 2
         assert event_types.count("agent.idle") == 2
+
+    quoted_reply = client.post(
+        f"/api/v1/workspaces/{workspace_id}/rooms/{room['id']}/messages",
+        headers={**headers, "X-Idempotency-Key": "human-quoted-agent-0001"},
+        json={"content": "Bonjour", "replyToId": result["messageId"]},
+    )
+    assert quoted_reply.status_code == 201, quoted_reply.text
+    with SessionLocal() as db:
+        quoted_event_id = db.scalar(
+            select(ConversationEvent.id)
+            .where(
+                ConversationEvent.room_id == UUID(room["id"]),
+                ConversationEvent.event_type == "message.created",
+                ConversationEvent.payload["messageId"].as_string() == quoted_reply.json()["id"],
+            )
+            .order_by(ConversationEvent.sequence.desc())
+        )
+    assert quoted_event_id
+    quoted_result = execute_room_turn(UUID(room["id"]), quoted_event_id)
+    assert quoted_result["status"] == "completed"
+    assert "tu es uniquement l'agent « Mini B »" in requests[2].system_prompt
 
     failure_trigger = uuid4()
     first_failure = record_room_failure(UUID(room["id"]), failure_trigger, "model_not_found")
@@ -305,7 +330,9 @@ def test_empty_ollama_response_is_retryable(monkeypatch) -> None:
     with pytest.raises(ModelProviderError) as error:
         generate_model_response(
             provider,
-            ModelRequest("qwen3.5:4b", "Réponds brièvement.", [{"role": "user", "content": "Test"}]),
+            ModelRequest(
+                "qwen3.5:4b", "Réponds brièvement.", [{"role": "user", "content": "Test"}]
+            ),
         )
 
     assert error.value.code == "empty_model_response"
