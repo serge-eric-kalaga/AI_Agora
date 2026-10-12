@@ -89,6 +89,37 @@ function afterRender() {
   );
 }
 
+function nextAnimationFrame() {
+  return new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+}
+
+async function stabilizeMessagePosition(
+  list: HTMLDivElement,
+  target: HTMLElement,
+  offset: number,
+  isCancelled: () => boolean,
+) {
+  // Le navigateur, les polices et React peuvent encore modifier la géométrie après le premier rendu.
+  // Maintenir l'ancre quelques images empêche une restauration native tardive de gagner la course.
+  for (let frame = 0; frame < 45; frame += 1) {
+    await nextAnimationFrame();
+    if (isCancelled() || !target.isConnected) return false;
+    const currentOffset = target.getBoundingClientRect().top - list.getBoundingClientRect().top;
+    const correction = currentOffset - offset;
+    if (Math.abs(correction) > 0.5) list.scrollTop += correction;
+  }
+  return true;
+}
+
+async function stabilizeAtBottom(list: HTMLDivElement, isCancelled: () => boolean) {
+  for (let frame = 0; frame < 20; frame += 1) {
+    await nextAnimationFrame();
+    if (isCancelled()) return false;
+    list.scrollTop = list.scrollHeight;
+  }
+  return true;
+}
+
 export function Chat({ id }: { id: string }) {
   const { state } = useAgora();
   const room = state.rooms.find((r) => r.id === id);
@@ -186,6 +217,9 @@ function ChatRoom({ room }: { room: Room }) {
     [loadOlderMessages, notify, room.id],
   );
   useEffect(() => {
+    if ('scrollRestoration' in window.history) window.history.scrollRestoration = 'manual';
+  }, []);
+  useEffect(() => {
     if (mode !== 'demo' || room.status !== 'running') return;
     const timer = setInterval(() => {
       if (document.visibilityState === 'visible')
@@ -226,16 +260,15 @@ function ChatRoom({ room }: { room: Room }) {
             target = document.getElementById(`message-${savedPosition.messageId}`);
           }
           if (target) {
-            const currentOffset =
-              target.getBoundingClientRect().top - list.getBoundingClientRect().top;
-            list.scrollTop += currentOffset - savedPosition.offset;
+            await stabilizeMessagePosition(list, target, savedPosition.offset, () => cancelled);
           } else {
-            list.scrollTop = list.scrollHeight;
+            await stabilizeAtBottom(list, () => cancelled);
             followsLatest.current = true;
           }
         } else {
-          list.scrollTop = list.scrollHeight;
+          await stabilizeAtBottom(list, () => cancelled);
         }
+        if (cancelled) return;
         restoringScroll.current = false;
         setShowScrollToBottom(!followsLatest.current);
         saveScrollPosition(room.id, list);
