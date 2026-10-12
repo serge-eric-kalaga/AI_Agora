@@ -197,7 +197,6 @@ export function RoomWizard() {
                       <span>
                         <strong>{a.name}</strong>
                         <small>{a.role}</small>
-                        <small>{a.model}</small>
                       </span>
                       <input
                         type="checkbox"

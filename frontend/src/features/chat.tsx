@@ -29,7 +29,7 @@ import { Avatar, Badge, Empty, Modal, Progress, Status } from '@/components/ui';
 import { ToolChips } from './agents';
 import { effectiveTools } from '@/domain/engine';
 import { downloadJson } from '@/data/repository';
-import { t, formatMoney, formatNumber, formatTime } from '@/i18n';
+import { t, formatMoney, formatTime } from '@/i18n';
 import type { Message, Room } from '@/domain/models';
 const emojis = ['👍', '❤️', '🎯', '🤔'];
 export function Chat({ id }: { id: string }) {
@@ -65,6 +65,8 @@ function ChatRoom({ room }: { room: Room }) {
   } = useAgora();
   const [text, setText] = useState(''),
     [replyTo, setReplyTo] = useState<Message | null>(null),
+    [mention, setMention] = useState<{ start: number; end: number; query: string } | null>(null),
+    [activeMention, setActiveMention] = useState(0),
     [details, setDetails] = useState(false),
     [addOpen, setAddOpen] = useState(false),
     [agentId, setAgentId] = useState(''),
@@ -73,6 +75,13 @@ function ChatRoom({ room }: { room: Room }) {
     composer = useRef<HTMLTextAreaElement>(null);
   const messages = state.messages.filter((m) => m.roomId === room.id);
   const participants = state.agents.filter((a) => room.agentIds.includes(a.id));
+  const mentionSuggestions = mention
+    ? participants.filter((agent) =>
+        agent.name
+          .toLocaleLowerCase(t.locale)
+          .startsWith(mention.query.toLocaleLowerCase(t.locale)),
+      )
+    : [];
   const available = state.agents.filter((a) => a.active && !room.agentIds.includes(a.id));
   useEffect(() => {
     if (mode !== 'demo' || room.status !== 'running') return;
@@ -109,6 +118,27 @@ function ChatRoom({ room }: { room: Room }) {
       setSubmitting(false);
     }
   }
+  function updateComposer(value: string, cursor: number) {
+    setText(value);
+    const match = value.slice(0, cursor).match(/(?:^|\s)@([^\s@]*)$/u);
+    if (!match) {
+      setMention(null);
+      return;
+    }
+    setMention({ start: cursor - match[1].length - 1, end: cursor, query: match[1] });
+    setActiveMention(0);
+  }
+  function insertMention(name: string) {
+    if (!mention) return;
+    const next = `${text.slice(0, mention.start)}@${name} ${text.slice(mention.end)}`;
+    const cursor = mention.start + name.length + 2;
+    setText(next);
+    setMention(null);
+    requestAnimationFrame(() => {
+      composer.current?.focus();
+      composer.current?.setSelectionRange(cursor, cursor);
+    });
+  }
   function report(operation: Promise<unknown>) {
     void operation.catch((cause) =>
       notify(cause instanceof Error ? cause.message : t.shell.storageError),
@@ -144,7 +174,7 @@ function ChatRoom({ room }: { room: Room }) {
               <Avatar agent={a} size="sm" />
               <div>
                 <Link href={`/fr/agents/${a.id}`}>{a.name}</Link>
-                <small>{a.model}</small>
+                <small>{a.role}</small>
                 <span
                   className={`tiny ${a.active && provider?.connected ? 'text-green' : 'text-amber'}`}
                 >
@@ -152,9 +182,7 @@ function ChatRoom({ room }: { room: Room }) {
                     ? t.chat.agentSuspended
                     : !provider?.connected
                       ? t.chat.providerOffline
-                      : provider?.kind === 'local'
-                        ? t.common.local
-                        : t.common.cloud}
+                      : t.common.available}
                 </span>
               </div>
               <button
@@ -185,10 +213,6 @@ function ChatRoom({ room }: { room: Room }) {
             <dd>
               {messages.filter((message) => message.agentId).length} / {room.maxMessages}
             </dd>
-          </div>
-          <div>
-            <dt>{t.chat.localUsage}</dt>
-            <dd>{formatNumber(room.localTokens)} tok</dd>
           </div>
           <div>
             <dt>{t.rooms.maxMinutes}</dt>
@@ -346,7 +370,6 @@ function ChatRoom({ room }: { room: Room }) {
                 </div>
               );
             const agent = state.agents.find((a) => a.id === message.agentId);
-            const provider = state.providers.find((p) => p.id === agent?.providerId);
             const reply = messages.find((m) => m.id === message.replyTo);
             return (
               <article
@@ -357,12 +380,6 @@ function ChatRoom({ room }: { room: Room }) {
                 <div className="message-content">
                   <div className="message-meta">
                     <strong>{agent?.name ?? t.common.you}</strong>
-                    {agent && (
-                      <Badge tone={provider?.kind === 'local' ? 'green' : 'neutral'}>
-                        {agent.model}
-                        {provider?.kind === 'local' ? ` · ${t.common.local}` : ''}
-                      </Badge>
-                    )}
                     <time dateTime={message.createdAt}>{formatTime(message.createdAt)}</time>
                     <button
                       className="icon-button message-reply"
@@ -461,17 +478,74 @@ function ChatRoom({ room }: { room: Room }) {
               </button>
             </div>
           )}
+          {mentionSuggestions.length > 0 && (
+            <div
+              className="mention-suggestions"
+              id={`mention-suggestions-${room.id}`}
+              role="listbox"
+              aria-label={t.chat.mentionSuggestions}
+            >
+              {mentionSuggestions.map((agent, index) => (
+                <button
+                  type="button"
+                  role="option"
+                  id={`mention-${agent.id}`}
+                  aria-selected={index === activeMention}
+                  className={index === activeMention ? 'active' : ''}
+                  key={agent.id}
+                  onMouseDown={(event) => {
+                    event.preventDefault();
+                    insertMention(agent.name);
+                  }}
+                >
+                  <Avatar agent={agent} size="sm" />
+                  <span>
+                    <strong>{agent.name}</strong>
+                    <small>{agent.role}</small>
+                  </span>
+                </button>
+              ))}
+            </div>
+          )}
           <form onSubmit={(event) => void send(event)} className="composer">
             <textarea
               ref={composer}
               value={text}
-              onChange={(e) => setText(e.target.value)}
+              onChange={(event) =>
+                updateComposer(
+                  event.target.value,
+                  event.target.selectionStart ?? event.target.value.length,
+                )
+              }
               maxLength={8000}
               placeholder={t.chat.placeholder}
               aria-label={t.chat.placeholder}
               rows={2}
+              aria-autocomplete="list"
               disabled={room.status !== 'running' || submitting}
               onKeyDown={(e) => {
+                if (mentionSuggestions.length > 0) {
+                  if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+                    e.preventDefault();
+                    const direction = e.key === 'ArrowDown' ? 1 : -1;
+                    setActiveMention(
+                      (current) =>
+                        (current + direction + mentionSuggestions.length) %
+                        mentionSuggestions.length,
+                    );
+                    return;
+                  }
+                  if (e.key === 'Enter' || e.key === 'Tab') {
+                    e.preventDefault();
+                    insertMention(mentionSuggestions[activeMention].name);
+                    return;
+                  }
+                  if (e.key === 'Escape') {
+                    e.preventDefault();
+                    setMention(null);
+                    return;
+                  }
+                }
                 if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
                   e.preventDefault();
                   void send();
@@ -485,7 +559,7 @@ function ChatRoom({ room }: { room: Room }) {
                   aria-label={t.chat.participants}
                   value=""
                   onChange={(e) => {
-                    setText((value) => value + `@${e.target.value} `);
+                    if (e.target.value) setText((value) => value + `@${e.target.value} `);
                     composer.current?.focus();
                   }}
                 >
@@ -528,7 +602,7 @@ function ChatRoom({ room }: { room: Room }) {
                   <option value="">{t.chat.addSelect}</option>
                   {available.map((a) => (
                     <option key={a.id} value={a.id}>
-                      {a.name} · {a.model}
+                      {a.name} · {a.role}
                     </option>
                   ))}
                 </select>

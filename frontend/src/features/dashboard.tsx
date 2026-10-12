@@ -204,9 +204,7 @@ export function Dashboard() {
                 </span>
                 <div>
                   <p>{e.text}</p>
-                  <small>
-                    {formatTime(e.createdAt)} · {t.common.simulated}
-                  </small>
+                  <small>{formatTime(e.createdAt)}</small>
                 </div>
               </div>
             ))}
@@ -223,10 +221,7 @@ export function Dashboard() {
               <Link href={`/fr/agents/${a.id}`} key={a.id}>
                 <Avatar agent={a} size="sm" />
                 <span>
-                  <strong>
-                    {a.name}
-                    <span className="muted">{a.model}</span>
-                  </strong>
+                  <strong>{a.name}</strong>
                   <small>{a.role}</small>
                 </span>
                 <span className={`status-dot ${a.active ? 'text-green' : 'muted'}`} />

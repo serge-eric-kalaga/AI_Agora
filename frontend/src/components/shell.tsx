@@ -379,9 +379,7 @@ export function Shell({ children }: { children: ReactNode }) {
               </span>
               <div>
                 <p>{e.text}</p>
-                <small>
-                  {formatTime(e.createdAt)} · {t.common.simulated}
-                </small>
+                <small>{formatTime(e.createdAt)}</small>
               </div>
             </div>
           ))}

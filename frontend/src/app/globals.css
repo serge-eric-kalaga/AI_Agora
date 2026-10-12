@@ -2508,6 +2508,45 @@ td > svg {
   flex-shrink: 0;
   background: var(--bg);
 }
+.mention-suggestions {
+  display: grid;
+  gap: 3px;
+  margin-bottom: 6px;
+  padding: 5px;
+  max-height: 210px;
+  overflow-y: auto;
+  border: 1px solid #a28aff38;
+  border-radius: 10px;
+  background: #11192a;
+  box-shadow: 0 12px 28px #0008;
+}
+.mention-suggestions button {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  width: 100%;
+  padding: 7px 9px;
+  border-radius: 7px;
+  text-align: left;
+}
+.mention-suggestions button:hover,
+.mention-suggestions button.active {
+  background: #a28aff18;
+}
+.mention-suggestions span {
+  display: grid;
+  min-width: 0;
+}
+.mention-suggestions strong {
+  font-size: 10px;
+}
+.mention-suggestions small {
+  color: var(--muted);
+  font-size: 9px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 .composer {
   border: 1px solid #a28aff32;
   background: #151d2e;

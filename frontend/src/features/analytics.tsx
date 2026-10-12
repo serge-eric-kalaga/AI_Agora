@@ -1,13 +1,6 @@
 'use client';
-import {
-  Activity,
-  Download,
-  ChartNoAxesCombined,
-  Coins,
-  MessagesSquare,
-  Server,
-} from 'lucide-react';
-import { Avatar, Badge, PageHeading, Progress, SectionHeading, Empty } from '@/components/ui';
+import { Activity, Download, ChartNoAxesCombined, Bot, Coins, MessagesSquare } from 'lucide-react';
+import { Avatar, PageHeading, Progress, SectionHeading, Empty } from '@/components/ui';
 import { useAgora } from '@/components/store';
 import { downloadJson } from '@/data/repository';
 import { formatMoney, formatNumber, formatTime, t } from '@/i18n';
@@ -42,9 +35,9 @@ export function Analytics() {
             value: formatMoney(state.rooms.reduce((sum, r) => sum + r.spent, 0)),
           },
           {
-            icon: Server,
+            icon: Bot,
             title: t.analytics.local,
-            value: formatNumber(state.rooms.reduce((sum, r) => sum + r.localTokens, 0)),
+            value: formatNumber(state.agents.filter((agent) => agent.active).length),
           },
         ].map(({ icon: Icon, title, value }) => (
           <div className="metric-card" key={title}>
@@ -53,7 +46,6 @@ export function Analytics() {
               <Icon size={18} />
             </div>
             <strong className="metric-value">{value}</strong>
-            <small>{t.common.simulated}</small>
           </div>
         ))}
       </div>
@@ -93,7 +85,6 @@ export function Analytics() {
                   {new Date(e.createdAt).toLocaleDateString(t.locale)} · {formatTime(e.createdAt)}
                 </small>
               </div>
-              <Badge tone="neutral">{t.common.simulated}</Badge>
             </div>
           ))}
         </div>

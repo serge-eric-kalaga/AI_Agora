@@ -35,9 +35,14 @@ test('desktop visual inspection and participant changes preserve conversation hi
   await expect(page.locator('.room-inspector .participant')).toHaveCount(4);
   await page.getByRole('button', { name: 'Reprendre', exact: true }).click();
   await page.getByRole('button', { name: 'Répondre Nova' }).click();
-  await page
-    .getByRole('textbox', { name: /Partagez une idée/ })
-    .fill('Cette proposition mérite une expérimentation.');
+  const composer = page.getByRole('textbox', { name: /Partagez une idée/ });
+  await composer.fill('@No');
+  const suggestions = page.getByRole('listbox', { name: 'Suggestions de participants' });
+  await expect(suggestions).toBeVisible();
+  await expect(suggestions.getByRole('option', { name: /Nova/ })).toBeVisible();
+  await composer.press('Enter');
+  await expect(composer).toHaveValue('@Nova ');
+  await composer.pressSequentially('Cette proposition mérite une expérimentation.');
   await page.getByRole('button', { name: 'Envoyer le message' }).click();
   await expect(page.locator('.human-message blockquote')).toContainText('@Atlas');
   await page.reload();

@@ -105,7 +105,6 @@ export function Agents() {
       {agents.length ? (
         <div className="agent-grid">
           {agents.map((agent) => {
-            const provider = state.providers.find((p) => p.id === agent.providerId);
             return (
               <article key={agent.id} className={`agent-card tone-${agent.color}`}>
                 <div className="agent-card-header">
@@ -132,13 +131,6 @@ export function Agents() {
                   >
                     <Copy size={16} />
                   </button>
-                </div>
-                <div className="agent-model">
-                  <span className="status-dot" />
-                  {agent.model}
-                  <Badge tone={provider?.kind === 'local' ? 'green' : 'neutral'}>
-                    {provider?.kind === 'local' ? t.common.local : t.common.cloud}
-                  </Badge>
                 </div>
                 <p className="agent-description">{agent.description}</p>
                 <div className="trait-bars">
