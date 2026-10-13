@@ -20,6 +20,5 @@ __all__ = [
     "workspaces_router",
 ]
 
-from .collaboration import router as collaboration_router
-
 from .admin import router as admin_router
+from .collaboration import router as collaboration_router

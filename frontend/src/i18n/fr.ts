@@ -522,6 +522,9 @@ export const fr = {
     open: 'Voir dans la discussion',
   },
   conversationSettings: {
+    permanent: 'Continuer sans échéance',
+    permanentHint:
+      'La discussion continue jusqu’à votre pause ou votre arrêt. Le budget reste respecté.',
     title: 'Rythme de la discussion',
     tools: { files: 'Lire les documents joints', web: 'Utiliser les sources jointes' },
     pace: 'Cadence',

@@ -134,7 +134,9 @@ def recover_active_rooms() -> dict[str, int]:
                     if started and started.tzinfo is None:
                         started = started.replace(tzinfo=timezone.utc)
                     if room.amount_spent >= room.budget_limit or (
-                        started and now - started >= timedelta(minutes=room.max_duration_minutes)
+                        room.temporal_mode != "permanent"
+                        and started
+                        and now - started >= timedelta(minutes=room.max_duration_minutes)
                     ):
                         continue
                     if client.exists(f"ai-agora:room:{room.id}:turn"):
@@ -143,7 +145,7 @@ def recover_active_rooms() -> dict[str, int]:
                         select(func.max(ConversationEvent.sequence))
                         .where(
                             ConversationEvent.room_id == room.id,
-                            ConversationEvent.event_type == "message.created",
+                            ConversationEvent.event_type.in_(["message.created", "agent.acted"]),
                         )
                         .group_by(ConversationEvent.payload["threadRootId"].as_string())
                     )

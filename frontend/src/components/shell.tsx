@@ -68,10 +68,19 @@ export function Shell({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (!activeWorkspaceId || !user || mode !== 'api') return;
     let cancelled = false;
-    const refresh = () => { void listNotifications(activeWorkspaceId).then(page => { if (!cancelled) setHasUnread(page.items.some(n => !n.readAt)); }).catch(() => undefined); };
+    const refresh = () => {
+      void listNotifications(activeWorkspaceId)
+        .then((page) => {
+          if (!cancelled) setHasUnread(page.items.some((n) => !n.readAt));
+        })
+        .catch(() => undefined);
+    };
     refresh();
     const interval = window.setInterval(refresh, 30_000);
-    return () => { cancelled = true; window.clearInterval(interval); };
+    return () => {
+      cancelled = true;
+      window.clearInterval(interval);
+    };
   }, [activeWorkspaceId, mode, user]);
   const mobileMenu = useRef<HTMLElement>(null);
   useEffect(() => {

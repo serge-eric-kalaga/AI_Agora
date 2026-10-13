@@ -15,6 +15,7 @@ from api.database.models import (
     Room,
     RoomMemory,
     RoomParticipant,
+    User,
 )
 from api.schemas.memory import MemoryState
 
@@ -124,7 +125,10 @@ def refresh_memory(room_id: UUID, *, force: bool = False) -> dict[str, str]:
             {
                 "id": str(m.id),
                 "author_agent_id": str(m.author_agent_id) if m.author_agent_id else None,
-                "auteur": names.get(m.author_agent_id, "Agent") if m.author_agent_id else "Humain",
+                "auteur": names.get(m.author_agent_id, "Agent")
+                if m.author_agent_id
+                else (human.username if (human := db.get(User, m.author_user_id)) else "Humain"),
+                "author_user_id": str(m.author_user_id) if m.author_user_id else None,
                 "contenu": m.content[:900],
             }
             for m in batch
@@ -141,6 +145,9 @@ def refresh_memory(room_id: UUID, *, force: bool = False) -> dict[str, str]:
             for agent_id in {m.author_agent_id for m in sources.values()}
             if agent_id is not None
         ]
+        if not entry_schema["author_agent_ids"]["items"]["enum"]:
+            del entry_schema["author_agent_ids"]["items"]["enum"]
+            entry_schema["author_agent_ids"]["maxItems"] = 0
         request = ModelRequest(
             agent.model,
             "Tu tiens une mémoire factuelle des propos, pas une vérité sur le monde. Réponds uniquement en JSON. "

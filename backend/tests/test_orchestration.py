@@ -1,5 +1,6 @@
 """Validation des fournisseurs et du tour d'agent sans appel externe."""
 
+import json
 from contextlib import nullcontext
 from datetime import datetime, timezone
 from uuid import UUID, uuid4
@@ -113,9 +114,10 @@ def test_local_turn_is_idempotent_and_accounts_for_tokens(
 
     def fake_generation(provider, request: ModelRequest) -> ModelResult:
         requests.append(request)
-        return ModelResult(
-            "Mini B (Simulation) recommande de sécuriser le flux temps réel.", 30, 12
-        )
+        content = "Mini B (Simulation) recommande de sécuriser le flux temps réel."
+        if request.output_schema:
+            content = json.dumps({"action": "reply", "content": content, "emoji": None})
+        return ModelResult(content, 30, 12)
 
     monkeypatch.setattr("api.services.orchestration.generate_model_response", fake_generation)
 
@@ -137,10 +139,10 @@ def test_local_turn_is_idempotent_and_accounts_for_tokens(
     assert "type_auteur=humain" in requests[0].messages[-1]["content"]
     assert "auteur_affiche=architecte" in requests[0].messages[-1]["content"]
     assert "dernier message vient de l’utilisateur humain" in requests[0].system_prompt
-    assert requests[1].messages[-2]["role"] == "user"
-    assert '"auteur": "architecte"' in requests[1].messages[-2]["content"]
-    assert "type_auteur=agent" in requests[1].messages[-1]["content"]
-    assert "auteur_affiche=Mini B" in requests[1].messages[-1]["content"]
+    assert requests[1].messages[-3]["role"] == "user"
+    assert '"auteur": "architecte"' in requests[1].messages[-3]["content"]
+    assert "type_auteur=agent" in requests[1].messages[-2]["content"]
+    assert "auteur_affiche=Mini B" in requests[1].messages[-2]["content"]
     assert "dernier message vient de l’agent « Mini B »" in requests[1].system_prompt
     with SessionLocal() as db:
         stored_room = db.get(Room, UUID(room["id"]))
@@ -171,7 +173,8 @@ def test_local_turn_is_idempotent_and_accounts_for_tokens(
             generated_by_agent[UUID(agents[1]["id"])].metadata_json["replyToAuthorKind"] == "humain"
         )
         assert (
-            generated_by_agent[UUID(agents[1]["id"])].metadata_json["replyToAuthorName"] == "architecte"
+            generated_by_agent[UUID(agents[1]["id"])].metadata_json["replyToAuthorName"]
+            == "architecte"
         )
         assert (
             generated_by_agent[UUID(agents[0]["id"])].metadata_json["replyToAuthorKind"] == "agent"
@@ -182,11 +185,7 @@ def test_local_turn_is_idempotent_and_accounts_for_tokens(
         reactions = db.scalars(
             select(MessageReaction).where(MessageReaction.agent_id.is_not(None))
         ).all()
-        assert len(reactions) == 2
-        assert {reaction.message_id for reaction in reactions} == {
-            UUID(message_response.json()["id"]),
-            UUID(result["messageId"]),
-        }
+        assert not reactions  # Une réponse ne fabrique plus une réaction automatique.
         assert stored_room.local_tokens == 84
         assert stored_room.cloud_tokens == 0
         assert stored_room.amount_spent == 0

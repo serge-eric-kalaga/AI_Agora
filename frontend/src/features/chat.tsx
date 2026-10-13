@@ -314,7 +314,14 @@ function ChatRoom({ room }: { room: Room }) {
         setShowScrollToBottom(!followsLatest.current);
         saveScrollPosition(room.id, list);
         const requestedMessage = new URLSearchParams(window.location.search).get('message');
-        if (requestedMessage) await jumpToMessage(requestedMessage);
+        if (requestedMessage) {
+          await jumpToMessage(requestedMessage);
+          // Le lien ouvre la cible une seule fois ; un rafraîchissement restaure ensuite la lecture.
+          const url = new URL(window.location.href);
+          url.searchParams.delete('message');
+          url.searchParams.delete('thread');
+          window.history.replaceState(window.history.state, '', url);
+        }
       })
       .catch((cause) => {
         restoringScroll.current = false;

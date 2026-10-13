@@ -28,6 +28,10 @@ class ConversationSettings(APIModel):
 
 
 class ConversationSettingsUpdate(ConversationSettings):
+    temporal_mode: TemporalMode | None = Field(
+        default=None,
+        description="Permanent : sans échéance, jusqu’à pause ou arrêt ; le budget et les permissions restent appliqués.",
+    )
     tools: list[Literal["web", "files", "code"]] | None = Field(
         default=None,
         description="Autorisations de la salle ; les profils des agents doivent également autoriser chaque outil.",

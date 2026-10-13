@@ -821,7 +821,9 @@ def update_conversation_settings(
         raise ConflictError(
             "stale_room_version", "La salle a changé ; rechargez-la avant de réessayer."
         )
-    room.conversation_settings = payload.model_dump(exclude={"expected_version", "tools"})
+    room.conversation_settings = payload.model_dump(exclude={"expected_version", "tools", "temporal_mode"})
+    if payload.temporal_mode is not None:
+        room.temporal_mode = payload.temporal_mode
     if payload.tools is not None:
         room.tools = list(dict.fromkeys(payload.tools))
     room.version += 1

@@ -646,6 +646,7 @@ export async function updateConversationSettings(
   room: Room,
   settings: ConversationSettings,
   tools?: Room['tools'],
+  temporalMode?: Room['temporalMode'],
 ) {
   return mapRoom(
     await request(
@@ -657,6 +658,7 @@ export async function updateConversationSettings(
           ...settings,
           expectedVersion: room.version,
           ...(tools ? { tools } : {}),
+          ...(temporalMode ? { temporalMode } : {}),
         }),
       },
     ),

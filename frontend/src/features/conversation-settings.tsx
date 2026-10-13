@@ -12,6 +12,7 @@ export function ConversationSettingsPanel({ room }: { room: Room }) {
   );
   const [saving, setSaving] = useState(false);
   const [tools, setTools] = useState(room.tools);
+  const [permanent, setPermanent] = useState(room.temporalMode === 'permanent');
   const editable =
     workspaces.find((workspace) => workspace.id === activeWorkspaceId)?.role !== 'observer';
   async function save(event: FormEvent) {
@@ -19,7 +20,13 @@ export function ConversationSettingsPanel({ room }: { room: Room }) {
     if (!activeWorkspaceId || saving) return;
     setSaving(true);
     try {
-      await updateConversationSettings(activeWorkspaceId, room, settings, tools);
+      await updateConversationSettings(
+        activeWorkspaceId,
+        room,
+        settings,
+        tools,
+        permanent ? 'permanent' : room.temporalMode === 'permanent' ? 'live' : room.temporalMode,
+      );
       await loadRoom(room.id);
       notify(t.conversationSettings.saved);
     } catch (error) {
@@ -88,6 +95,17 @@ export function ConversationSettingsPanel({ room }: { room: Room }) {
                 </option>
               ))}
             </select>
+          </label>
+          <label className="field">
+            <span>
+              <input
+                type="checkbox"
+                checked={permanent}
+                onChange={(event) => setPermanent(event.target.checked)}
+              />
+              {t.conversationSettings.permanent}
+            </span>
+            <small>{t.conversationSettings.permanentHint}</small>
           </label>
           {(['files', 'web'] as const).map((tool) => (
             <label className="field" key={tool}>

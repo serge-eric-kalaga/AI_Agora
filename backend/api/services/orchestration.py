@@ -25,6 +25,7 @@ from api.database.models import (
     RoomStatus,
     User,
 )
+from api.services.conversation_actions import choose_action
 from api.services.notifications import notify_message
 from api.services.resources import resolve_citations, resource_context
 
@@ -63,19 +64,6 @@ def _bounded_number(value: object, default: float, minimum: float, maximum: floa
     if not isinstance(value, int | float):
         return default
     return min(max(float(value), minimum), maximum)
-
-
-def _reaction_for(content: str) -> str:
-    """Choisit une réaction courte cohérente avec la réponse produite."""
-
-    normalized = content.casefold()
-    if any(word in normalized for word in ("désaccord", "cependant", "réserve", "nuance")):
-        return "🤔"
-    if any(word in normalized for word in ("priorité", "propose", "recommande", "objectif")):
-        return "🎯"
-    if any(word in normalized for word in ("solidarité", "soutien", "courage", "paix")):
-        return "❤️"
-    return "👍"
 
 
 def _stable_entropy(trigger_event_id: UUID, agent_id: UUID) -> int:
@@ -202,7 +190,13 @@ def _generate_complete_response(provider: ProviderConnection, request: ModelRequ
         prompt_tokens += result.prompt_tokens
         completion_tokens += result.completion_tokens
         continuations += 1
-    return ModelResult(content, prompt_tokens, completion_tokens, result.truncated)
+    if result.truncated:
+        raise ModelProviderError(
+            "Réponse toujours incomplète après continuation.",
+            code="incomplete_response",
+            retryable=True,
+        )
+    return ModelResult(content, prompt_tokens, completion_tokens, False)
 
 
 def _condense_response(
@@ -212,7 +206,7 @@ def _condense_response(
 
     if len(result.content.split()) <= 180:
         return result
-    condensed = generate_model_response(
+    condensed = _generate_complete_response(
         provider,
         ModelRequest(
             request.model,
@@ -313,7 +307,7 @@ def _prepare_turn(room_id: UUID, trigger_event_id: UUID) -> TurnContext | None:
         event = db.get(ConversationEvent, trigger_event_id)
         if not room or not event or event.room_id != room.id or room.status != RoomStatus.RUNNING:
             return None
-        if event.event_type != "message.created":
+        if event.event_type not in {"message.created", "agent.acted"}:
             return None
         trigger_message_id = event.payload.get("messageId")
         try:
@@ -344,13 +338,19 @@ def _prepare_turn(room_id: UUID, trigger_event_id: UUID) -> TurnContext | None:
         raw_depth = event.payload.get("chainDepth", 0)
         chain_depth = raw_depth if isinstance(raw_depth, int) and raw_depth >= 0 else 0
         idempotency_key = f"agent-turn:{trigger_event_id}"
-        if db.scalar(select(Message.id).where(Message.idempotency_key == idempotency_key)):
+        if db.scalar(
+            select(ConversationEvent.id).where(
+                ConversationEvent.room_id == room_id,
+                ConversationEvent.idempotency_key == idempotency_key,
+            )
+        ):
             return None
         started_at = room.started_at
         if started_at and started_at.tzinfo is None:
             started_at = started_at.replace(tzinfo=timezone.utc)
         if room.amount_spent >= room.budget_limit or (
-            started_at
+            room.temporal_mode != "permanent"
+            and started_at
             and datetime.now(timezone.utc) - started_at
             >= timedelta(minutes=room.max_duration_minutes)
         ):
@@ -411,20 +411,20 @@ def _prepare_turn(room_id: UUID, trigger_event_id: UUID) -> TurnContext | None:
                 reply_target_id = quoted_message.author_agent_id
 
         # Une mention explicite prime, puis l'agent cité par une réponse humaine.
-        # Sinon les participants les moins entendus sont favorisés, avec un
-        # départage stable mais varié et une pénalité pour les prises de parole récentes.
+        # Sinon un score varié favorise les moins entendus sans imposer un tour de table.
+        # Le dernier acteur (y compris une réaction ou un silence) cède la priorité.
         agent, provider = min(
             participants,
             key=lambda item: (
                 0 if item[0].id in mentioned_agent_ids or item[0].id == reply_target_id else 1,
-                1 if item[0].id == trigger_message.author_agent_id else 0,
-                contributions.get(item[0].id, 0),
-                (
-                    len(recent_speakers) - recent_speakers.index(item[0].id)
-                    if item[0].id in recent_speakers
-                    else 0
-                ),
-                _stable_entropy(trigger_event_id, item[0].id),
+                1
+                if item[0].id == trigger_message.author_agent_id
+                and event.event_type == "message.created"
+                else 0,
+                (_stable_entropy(trigger_event_id, item[0].id) / 2**64)
+                + min(contributions.get(item[0].id, 0), 20) * 0.025
+                + (0.35 if item[0].id in recent_speakers[:2] else 0)
+                + (1.25 if item[0].id == event.actor_agent_id else 0),
             ),
         )
         names = {item.id: item.name for item, _ in participants}
@@ -655,13 +655,20 @@ def execute_room_turn(room_id: UUID, trigger_event_id: UUID) -> dict[str, str]:
                 context.temperature,
                 context.max_tokens,
             )
+            action_kind = "reply"
+            action_emoji = None
             with local_generation_slot(provider):
-                result = _generate_complete_response(provider, request)
-                if not context.allow_long_response:
-                    result = _condense_response(provider, request, result)
-                result = _repair_identity(
-                    provider, request, result, context.agent_name, context.participant_names
-                )
+                if context.triggered_by_user:
+                    result = _generate_complete_response(provider, request)
+                else:
+                    decision, result = choose_action(provider, request, generate_model_response)
+                    action_kind, action_emoji = decision.action, decision.emoji
+                if action_kind in {"reply", "initiative"}:
+                    if not context.allow_long_response:
+                        result = _condense_response(provider, request, result)
+                    result = _repair_identity(
+                        provider, request, result, context.agent_name, context.participant_names
+                    )
         finally:
             _publish_typing(context, False)
         provider_kind = provider.kind
@@ -698,12 +705,69 @@ def execute_room_turn(room_id: UUID, trigger_event_id: UUID) -> dict[str, str]:
         if started_at and started_at.tzinfo is None:
             started_at = started_at.replace(tzinfo=timezone.utc)
         expired = bool(
-            started_at
+            room.temporal_mode != "permanent"
+            and started_at
             and datetime.now(timezone.utc) - started_at
             >= timedelta(minutes=room.max_duration_minutes)
         )
         if room.amount_spent + cost > room.budget_limit or expired:
             return {"status": "budget_exhausted", "roomId": str(room_id)}
+        if action_kind in {"reaction", "silence"}:
+            if action_kind == "reaction":
+                existing_reaction = db.scalar(
+                    select(MessageReaction).where(
+                        MessageReaction.message_id == context.trigger_message_id,
+                        MessageReaction.agent_id == context.agent_id,
+                        MessageReaction.emoji == action_emoji,
+                    )
+                )
+                if not existing_reaction:
+                    db.add(
+                        MessageReaction(
+                            message_id=context.trigger_message_id,
+                            agent_id=context.agent_id,
+                            emoji=action_emoji,
+                        )
+                    )
+                append_room_event(
+                    db,
+                    room.id,
+                    "reaction.updated",
+                    {
+                        "messageId": str(context.trigger_message_id),
+                        "emoji": action_emoji,
+                        "agentId": str(context.agent_id),
+                        "present": True,
+                    },
+                    actor_agent_id=context.agent_id,
+                    idempotency_key=f"agent-reaction:{trigger_event_id}",
+                )
+            total_tokens = result.prompt_tokens + result.completion_tokens
+            if provider_kind == ProviderKind.LOCAL:
+                room.local_tokens += total_tokens
+            else:
+                room.cloud_tokens += total_tokens
+                room.amount_spent += cost
+            event = append_room_event(
+                db,
+                room.id,
+                "agent.acted",
+                {
+                    "action": action_kind,
+                    "messageId": str(context.trigger_message_id),
+                    "threadRootId": str(context.thread_root_id) if context.thread_root_id else None,
+                    "chainDepth": context.chain_depth + 1,
+                },
+                actor_agent_id=context.agent_id,
+                idempotency_key=idempotency_key,
+            )
+            db.commit()
+            return {
+                "status": "completed",
+                "roomId": str(room.id),
+                "eventId": str(event.id),
+                "chainDepth": str(context.chain_depth + 1),
+            }
         message = Message(
             room_id=room.id,
             author_agent_id=context.agent_id,
@@ -726,33 +790,13 @@ def execute_room_turn(room_id: UUID, trigger_event_id: UUID) -> dict[str, str]:
                     for label, link in context.source_links.items()
                     if f"[{label}]" in result.content
                 ],
+                "conversationAction": action_kind,
                 "replyToAuthorKind": context.target_author_kind,
                 "replyToAuthorName": context.target_author_name,
             },
         )
         db.add(message)
         db.flush()
-        reaction_emoji = _reaction_for(message.content)
-        db.add(
-            MessageReaction(
-                message_id=context.trigger_message_id,
-                agent_id=context.agent_id,
-                emoji=reaction_emoji,
-            )
-        )
-        append_room_event(
-            db,
-            room.id,
-            "reaction.updated",
-            {
-                "messageId": str(context.trigger_message_id),
-                "emoji": reaction_emoji,
-                "present": True,
-                "agentId": str(context.agent_id),
-            },
-            actor_agent_id=context.agent_id,
-            idempotency_key=f"agent-reaction:{trigger_event_id}",
-        )
         notify_message(db, room, message)
         total_tokens = result.prompt_tokens + result.completion_tokens
         if provider_kind == ProviderKind.LOCAL:
