@@ -1,6 +1,5 @@
-import { cookies } from 'next/headers';
 import {
-  ACCESS_COOKIE,
+  storeSession,
   backendUrl,
   hasTrustedOrigin,
   publicBackendResponse,
@@ -34,15 +33,10 @@ export async function POST(request: Request, context: { params: Promise<{ action
   const payload = (await response.json()) as {
     accessToken: string;
     expiresIn: number;
+    refreshToken: string;
+    refreshExpiresIn: number;
     user: unknown;
   };
-  (await cookies()).set(ACCESS_COOKIE, payload.accessToken, {
-    httpOnly: true,
-    sameSite: 'lax',
-    secure: process.env.AGORA_COOKIE_SECURE === 'true',
-    path: '/',
-    maxAge: payload.expiresIn,
-    priority: 'high',
-  });
+  await storeSession(payload);
   return Response.json({ user: payload.user }, { status: response.status });
 }

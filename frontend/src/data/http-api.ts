@@ -302,7 +302,9 @@ export async function authenticate(
 }
 
 export async function endSession() {
-  await fetch('/api/session', { method: 'DELETE' });
+  const response = await fetch('/api/session', { method: 'DELETE' });
+  if (!response.ok)
+    throw new ApiError('Impossible de fermer la session. Réessayez.', response.status);
 }
 
 export async function listWorkspaces(): Promise<Workspace[]> {
@@ -493,6 +495,15 @@ export function subscribeRoom(
       `/api/backend/workspaces/${workspaceId}/rooms/${roomId}/stream?cursor=${encodeURIComponent(currentCursor)}`,
     );
     source = candidate;
+    candidate.addEventListener('session.expired', () => {
+      stopped = true;
+      candidate.close();
+      if (reconnectTimer !== undefined) window.clearTimeout(reconnectTimer);
+      const locale = window.location.pathname.split('/')[1] || 'fr';
+      // Une navigation complète efface aussi les données privées conservées en mémoire.
+      // eslint-disable-next-line @next/next/no-location-assign-relative-destination
+      window.location.assign(`/${locale}/connexion`);
+    });
     candidate.onopen = () => {
       lastActivity = Date.now();
     };

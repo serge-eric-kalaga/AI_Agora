@@ -35,6 +35,11 @@ async function proxy(request: Request, context: { params: Promise<{ path: string
     body,
     signal: request.signal,
   });
+  if (acceptsEvents && response.status === 401) {
+    return new Response('event: session.expired\ndata: {}\n\n', {
+      headers: { 'content-type': 'text/event-stream', 'cache-control': 'no-store' },
+    });
+  }
   return publicBackendResponse(response);
 }
 

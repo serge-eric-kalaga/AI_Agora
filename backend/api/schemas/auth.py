@@ -44,8 +44,22 @@ class UserRead(APIModel):
     created_at: datetime
 
 
+class RefreshRequest(APIModel):
+    refresh_token: str = Field(
+        min_length=40,
+        max_length=128,
+        description="Secret opaque de session. Réservé au serveur web ; jamais exposé au JavaScript.",
+    )
+
+
 class TokenResponse(APIModel):
     access_token: str = Field(description="Jeton JWT Bearer a envoyer dans Authorization.")
     token_type: str = "bearer"
     expires_in: int = Field(description="Duree de validite du jeton, en secondes.")
+    refresh_token: str | None = Field(
+        default=None, description="Secret de renouvellement, à conserver dans un cookie HttpOnly."
+    )
+    refresh_expires_in: int | None = Field(
+        default=None, description="Expiration absolue de la session, en secondes."
+    )
     user: UserRead

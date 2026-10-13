@@ -105,3 +105,7 @@ Autoriser `files` ou `web` dans les réglages de la salle ET dans le profil des 
 Les sources externes sont limitées à 1 Mo et quatre requêtes. Chaque adresse DNS et redirection doit rester publique. La connexion utilise l'IP validée avec le nom d'hôte conservé pour Host et TLS/SNI ([extension officielle HTTPCore](https://www.encode.io/httpcore/extensions/#sni_hostname)). Aucun proxy d'environnement, cookie ni contenu de conversation n'est envoyé au site consulté. Les originaux sont téléchargés en pièce jointe avec contrôle d'accès, sans affichage HTML actif.
 
 Swagger détaille `GET /resources`, `POST /resources/documents` (multipart `file`), `POST /resources/sources` (JSON `url`), `GET /resources/{id}` et `GET /resources/{id}/download`, sous chaque salle. Les imports identiques sont dédupliqués par salle.
+
+### Continuité de session
+
+La session web renouvelle son accès une seule fois après un refus 401, avec un secret opaque en cookie HttpOnly. PostgreSQL ne conserve que son condensat ; son expiration absolue est de sept jours et la déconnexion le révoque. Le JWT déjà émis reste valable jusqu’à son expiration normale. Une session définitivement expirée ferme le flux de salle et ouvre la connexion, sans boucle de reconnexion. Les sessions ouvertes avant cette évolution nécessitent une nouvelle connexion.
