@@ -3,7 +3,7 @@
 from uuid import UUID
 
 from fastapi import APIRouter, Query, status
-from sqlalchemy import func, select
+from sqlalchemy import func, select, true
 from sqlalchemy.exc import IntegrityError
 
 from api.database.models import (
@@ -129,7 +129,7 @@ def get_workspace_analytics(
         )
         .join(Room, Room.id == Message.room_id)
         .where(
-            (current_user.is_superadmin or Room.workspace_id == workspace_id),
+            (true() if current_user.is_superadmin else Room.workspace_id == workspace_id),
             Message.kind == MessageKind.MESSAGE,
         )
     ).one()
@@ -138,12 +138,16 @@ def get_workspace_analytics(
             func.coalesce(func.sum(Room.amount_spent), 0),
             func.coalesce(func.sum(Room.cloud_tokens), 0),
             func.coalesce(func.sum(Room.local_tokens), 0),
-        ).where(current_user.is_superadmin or Room.workspace_id == workspace_id)
+        ).where(true() if current_user.is_superadmin else Room.workspace_id == workspace_id)
     ).one()
     active_agents = (
         db.scalar(
             select(func.count(AgentDefinition.id)).where(
-                (current_user.is_superadmin or AgentDefinition.workspace_id == workspace_id),
+                (
+                    true()
+                    if current_user.is_superadmin
+                    else AgentDefinition.workspace_id == workspace_id
+                ),
                 AgentDefinition.is_active.is_(True),
             )
         )
@@ -154,7 +158,7 @@ def get_workspace_analytics(
             select(func.count(MessageReaction.id))
             .join(Message, Message.id == MessageReaction.message_id)
             .join(Room, Room.id == Message.room_id)
-            .where(current_user.is_superadmin or Room.workspace_id == workspace_id)
+            .where(true() if current_user.is_superadmin else Room.workspace_id == workspace_id)
         )
         or 0
     )
@@ -162,7 +166,7 @@ def get_workspace_analytics(
         select(Message.author_agent_id, func.count(Message.id))
         .join(Room, Room.id == Message.room_id)
         .where(
-            (current_user.is_superadmin or Room.workspace_id == workspace_id),
+            (true() if current_user.is_superadmin else Room.workspace_id == workspace_id),
             Message.kind == MessageKind.MESSAGE,
             Message.author_agent_id.is_not(None),
         )
@@ -173,7 +177,7 @@ def get_workspace_analytics(
         select(ConversationEvent, Room.name)
         .join(Room, Room.id == ConversationEvent.room_id)
         .where(
-            (current_user.is_superadmin or Room.workspace_id == workspace_id),
+            (true() if current_user.is_superadmin else Room.workspace_id == workspace_id),
             ConversationEvent.event_type.notin_(("agent.typing", "agent.idle")),
         )
         .order_by(ConversationEvent.created_at.desc())

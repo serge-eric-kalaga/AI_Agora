@@ -207,3 +207,11 @@ def test_independent_replies_keep_their_target_and_quoted_author(client, account
     assert quoted["replyAuthorName"] == account["user"]["username"]
     assert quoted["replyAuthorIsMe"] is True
     assert quoted["replyExcerpt"] == "Qui vient dimanche ?"
+
+    room_stats = client.get(
+        f"/api/v1/workspaces/{wid}/rooms/{rid}", headers=account["headers"]
+    ).json()
+    assert room_stats["messageCount"] == 3
+    assert room_stats["lastMessageAt"] is not None
+    collection = client.get(f"/api/v1/workspaces/{wid}/rooms", headers=account["headers"]).json()
+    assert next(r for r in collection["items"] if r["id"] == str(rid))["messageCount"] == 3

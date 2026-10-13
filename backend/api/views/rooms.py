@@ -9,7 +9,7 @@ from uuid import UUID
 from celery.exceptions import OperationalError
 from fastapi import APIRouter, Header, Query, Request, status
 from redis.exceptions import RedisError
-from sqlalchemy import and_, or_, select
+from sqlalchemy import and_, func, or_, select
 from sqlalchemy.orm import selectinload
 from sqlalchemy.sql import Select
 from starlette.responses import StreamingResponse
@@ -73,7 +73,19 @@ def _room(db: DbSession, workspace_id: UUID, room_id: UUID) -> Room:
     return room
 
 
-def _room_read(room: Room) -> RoomRead:
+def _room_read(
+    room: Room, db: DbSession, summary: tuple[int, datetime | None] | None = None
+) -> RoomRead:
+    # Un agrégat persisté évite de présenter les seuls messages de la page chargée.
+    count, last_message_at = (
+        summary
+        if summary is not None
+        else db.execute(
+            select(func.count(Message.id), func.max(Message.created_at)).where(
+                Message.room_id == room.id, Message.kind == MessageKind.MESSAGE
+            )
+        ).one()
+    )
     return RoomRead(
         id=room.id,
         workspace_id=room.workspace_id,
@@ -92,6 +104,8 @@ def _room_read(room: Room) -> RoomRead:
         amount_spent=room.amount_spent,
         max_messages=room.max_messages,
         max_duration_minutes=room.max_duration_minutes,
+        message_count=count,
+        last_message_at=last_message_at,
         cloud_tokens=room.cloud_tokens,
         local_tokens=room.local_tokens,
         version=room.version,
@@ -259,7 +273,23 @@ def list_rooms(workspace_id: UUID, db: DbSession, current_user: CurrentUser) -> 
     rooms = db.scalars(
         _room_query().where(Room.workspace_id == workspace_id).order_by(Room.created_at.desc())
     ).all()
-    return Page(items=[_room_read(room) for room in rooms])
+    # Une seule requête pour les compteurs de toute la liste, sans N+1.
+    summaries = (
+        {
+            room_id: (count, latest)
+            for room_id, count, latest in db.execute(
+                select(Message.room_id, func.count(Message.id), func.max(Message.created_at))
+                .where(
+                    Message.room_id.in_([room.id for room in rooms]),
+                    Message.kind == MessageKind.MESSAGE,
+                )
+                .group_by(Message.room_id)
+            )
+        }
+        if rooms
+        else {}
+    )
+    return Page(items=[_room_read(room, db, summaries.get(room.id, (0, None))) for room in rooms])
 
 
 @router.post(
@@ -285,7 +315,7 @@ def create_room(
         )
     )
     if existing:
-        return _room_read(_room(db, workspace_id, existing.resource_id))
+        return _room_read(_room(db, workspace_id, existing.resource_id), db)
     _validate_agents(db, workspace_id, payload.participant_ids)
     values = payload.model_dump(exclude={"participant_ids"})
     # Une conversation reste ouverte jusqu'à une action humaine, la durée ou le budget configuré.
@@ -321,7 +351,7 @@ def create_room(
         details={"participants": [str(item) for item in payload.participant_ids]},
     )
     db.commit()
-    return _room_read(_room(db, workspace_id, room.id))
+    return _room_read(_room(db, workspace_id, room.id), db)
 
 
 @router.get("/{room_id}", response_model=RoomRead, summary="Lire une arène")
@@ -329,7 +359,7 @@ def get_room(
     workspace_id: UUID, room_id: UUID, db: DbSession, current_user: CurrentUser
 ) -> RoomRead:
     require_workspace_member(db, workspace_id, current_user)
-    return _room_read(_room(db, workspace_id, room_id))
+    return _room_read(_room(db, workspace_id, room_id), db)
 
 
 @router.patch(
@@ -418,7 +448,7 @@ def set_room_status(
             schedule_room_turn(str(room.id), str(pending_event_id), force=True)
         except (OperationalError, RedisError):
             logger.exception("Impossible de reprendre la conversation room_id=%s", room.id)
-    return _room_read(_room(db, workspace_id, room.id))
+    return _room_read(_room(db, workspace_id, room.id), db)
 
 
 @router.put(
@@ -464,7 +494,7 @@ def set_participant(
         actor_user_id=current_user.id,
     )
     db.commit()
-    return _room_read(_room(db, workspace_id, room.id))
+    return _room_read(_room(db, workspace_id, room.id), db)
 
 
 @router.get(
@@ -877,7 +907,7 @@ def update_conversation_settings(
         workspace_id=workspace_id,
     )
     db.commit()
-    return _room_read(room)
+    return _room_read(room, db)
 
 
 @router.get(

@@ -99,6 +99,15 @@ class RoomRead(APIModel):
     amount_spent: Decimal
     max_messages: int | None
     max_duration_minutes: int
+    message_count: int = Field(
+        default=0,
+        ge=0,
+        description="Nombre total de messages persistés, tous fils compris, hors événements système.",
+    )
+    last_message_at: datetime | None = Field(
+        default=None,
+        description="Date du dernier message, indépendante de la pagination du navigateur.",
+    )
     cloud_tokens: int
     local_tokens: int
     version: int
