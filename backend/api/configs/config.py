@@ -36,6 +36,9 @@ class Settings(BaseSettings):
     sse_heartbeat_seconds: float = 15.0
     autonomous_turn_delay_seconds: int = Field(default=4, ge=1, le=300)
     room_turn_lock_seconds: int = Field(default=180, ge=30, le=600)
+    local_provider_concurrency: int = Field(default=1, ge=1, le=16)
+    room_recovery_interval_seconds: int = Field(default=30, ge=10, le=300)
+    room_recovery_stale_seconds: int = Field(default=180, ge=60, le=3600)
     allow_private_provider_endpoints: bool = False
 
     @field_validator("frontend_origins", mode="before")
@@ -60,7 +63,9 @@ class Settings(BaseSettings):
         if self.app_environment == "production":
             jwt_secret = self.jwt_secret.get_secret_value()
             if len(jwt_secret.encode()) < 32 or jwt_secret.startswith(("change-", "replace-")):
-                raise ValueError("JWT_SECRET doit contenir au moins 32 octets aléatoires en production")
+                raise ValueError(
+                    "JWT_SECRET doit contenir au moins 32 octets aléatoires en production"
+                )
             if not self.credential_encryption_key:
                 raise ValueError("CREDENTIAL_ENCRYPTION_KEY est obligatoire en production")
             try:

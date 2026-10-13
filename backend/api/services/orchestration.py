@@ -25,6 +25,7 @@ from api.database.models import (
 )
 
 from .events import append_room_event
+from .generation_capacity import local_generation_slot
 from .model_clients import ModelProviderError, ModelRequest, ModelResult, generate_model_response
 
 _SIMULATION_LABEL = re.compile(r"\s*\(simulation(?: analytique)?\)", re.IGNORECASE)
@@ -319,7 +320,7 @@ def _prepare_turn(room_id: UUID, trigger_event_id: UUID) -> TurnContext | None:
             return None
         latest_message_id = db.scalar(
             select(Message.id)
-            .where(Message.room_id == room.id)
+            .where(Message.room_id == room.id, Message.kind == MessageKind.MESSAGE)
             .order_by(Message.created_at.desc(), Message.id.desc())
             .limit(1)
         )
@@ -568,12 +569,13 @@ def execute_room_turn(room_id: UUID, trigger_event_id: UUID) -> dict[str, str]:
                 context.temperature,
                 context.max_tokens,
             )
-            result = _generate_complete_response(provider, request)
-            if not context.allow_long_response:
-                result = _condense_response(provider, request, result)
-            result = _repair_identity(
-                provider, request, result, context.agent_name, context.participant_names
-            )
+            with local_generation_slot(provider):
+                result = _generate_complete_response(provider, request)
+                if not context.allow_long_response:
+                    result = _condense_response(provider, request, result)
+                result = _repair_identity(
+                    provider, request, result, context.agent_name, context.participant_names
+                )
         finally:
             _publish_typing(context, False)
         provider_kind = provider.kind
@@ -596,7 +598,7 @@ def execute_room_turn(room_id: UUID, trigger_event_id: UUID) -> dict[str, str]:
             return {"status": "skipped", "roomId": str(room_id)}
         latest_message_id = db.scalar(
             select(Message.id)
-            .where(Message.room_id == room.id)
+            .where(Message.room_id == room.id, Message.kind == MessageKind.MESSAGE)
             .order_by(Message.created_at.desc(), Message.id.desc())
             .limit(1)
         )

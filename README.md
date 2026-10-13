@@ -54,6 +54,14 @@ Docker Compose lance trois workers Celery par défaut pour répartir les salles 
 
 Le MVP utilisable couvre le laboratoire personnel et les salles accessibles aux membres d’un même espace. Les invitations par email, la planification durable des modes arrière-plan/permanent, l’exécution d’outils externes, les pièces jointes et l’export PDF relèvent des extensions post-MVP ; l’export JSON complet est opérationnel.
 
+## Continuité des conversations
+
+Un service `scheduler` réconcilie périodiquement les salles actives avec leurs événements persistés. Il reprend les tâches perdues après redémarrage ou panne, sans relancer les salles en pause, arrêtées, expirées ou ayant épuisé leur budget. Les messages système d’erreur ne remplacent pas la dernière cible conversationnelle.
+
+Les baux Redis de salle et de fournisseur sont renouvelés pendant la génération. `LOCAL_PROVIDER_CONCURRENCY` vaut `1` par défaut et limite les générations simultanées sur un même endpoint Ollama, entre tous les workers et espaces. Augmenter ce paramètre après mesure de la capacité de la machine. `ROOM_RECOVERY_INTERVAL_SECONDS` vaut `30` et `ROOM_RECOVERY_STALE_SECONDS` vaut `180` ; ce dernier délai évite de dupliquer une tâche récemment planifiée.
+
+Le suivi de l’évolution validée est dans [docs/plan-evolution.md](docs/plan-evolution.md).
+
 ## Repères
 
 - [`frontend/README.md`](frontend/README.md) : architecture, commandes et préparation de l’intégration.

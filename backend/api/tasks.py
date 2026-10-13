@@ -1,14 +1,21 @@
 """Tâches asynchrones d'orchestration des agents."""
 
 import logging
+import time
+from datetime import datetime, timedelta, timezone
+from typing import cast
 from uuid import UUID
 
 from celery.exceptions import OperationalError
 from redis import Redis
-from redis.exceptions import LockNotOwnedError, RedisError
+from redis.exceptions import RedisError
+from sqlalchemy import select
 
 from api.celery_app import celery_app
 from api.configs import get_settings
+from api.database import SessionLocal
+from api.database.models import ConversationEvent, Room, RoomStatus
+from api.services.generation_capacity import LocalProviderBusy, renewed_lease
 from api.services.model_clients import ModelProviderError
 from api.services.orchestration import execute_room_turn, record_room_failure
 
@@ -28,18 +35,16 @@ def _execute_with_room_lock(room_id: UUID, event_id: UUID) -> dict[str, str]:
     lock = client.lock(
         f"ai-agora:room:{room_id}:turn",
         timeout=settings.room_turn_lock_seconds,
+        thread_local=False,
     )
     acquired = lock.acquire(blocking=True, blocking_timeout=1)
     if not acquired:
         client.close()
         raise RoomTurnBusy
     try:
-        return execute_room_turn(room_id, event_id)
+        with renewed_lease(lock, settings.room_turn_lock_seconds):
+            return execute_room_turn(room_id, event_id)
     finally:
-        try:
-            lock.release()
-        except LockNotOwnedError:
-            logger.warning("Le verrou du tour a expiré avant sa libération room_id=%s", room_id)
         client.close()
 
 
@@ -53,11 +58,11 @@ def schedule_room_turn(
     marker = f"ai-agora:room:{room_id}:scheduled:{trigger_event_id}"
     try:
         if force:
-            client.set(marker, "1", ex=SCHEDULE_MARKER_TTL_SECONDS)
+            client.set(marker, str(time.time()), ex=SCHEDULE_MARKER_TTL_SECONDS)
             claimed = True
         else:
             claimed = bool(
-                client.set(marker, "1", nx=True, ex=SCHEDULE_MARKER_TTL_SECONDS)
+                client.set(marker, str(time.time()), nx=True, ex=SCHEDULE_MARKER_TTL_SECONDS)
             )
         if not claimed:
             return False
@@ -75,7 +80,7 @@ def schedule_room_turn(
 
 @celery_app.task(
     bind=True,
-    max_retries=8,
+    max_retries=None,
 )
 def continue_room_turn(self, room_id: str, trigger_event_id: str) -> dict[str, str]:  # type: ignore[no-untyped-def]
     """Laisse les participants échanger tant que la salle reste active."""
@@ -84,10 +89,9 @@ def continue_room_turn(self, room_id: str, trigger_event_id: str) -> dict[str, s
     event_uuid = UUID(trigger_event_id)
     try:
         result = _execute_with_room_lock(room_uuid, event_uuid)
-    except RoomTurnBusy as exc:
-        if self.request.retries < 8:
-            raise self.retry(exc=exc, countdown=min(2 ** (self.request.retries + 1), 10)) from exc
-        return record_room_failure(room_uuid, event_uuid, "room_turn_busy")
+    except (RoomTurnBusy, LocalProviderBusy) as exc:
+        # La saturation est une attente normale, pas un message d'erreur dans la salle.
+        raise self.retry(exc=exc, countdown=10, max_retries=None) from exc
     except ModelProviderError as exc:
         if exc.retryable and self.request.retries < 3:
             raise self.retry(exc=exc, countdown=2 ** (self.request.retries + 1)) from exc
@@ -104,3 +108,59 @@ def continue_room_turn(self, room_id: str, trigger_event_id: str) -> dict[str, s
             except (OperationalError, RedisError) as exc:
                 raise self.retry(exc=exc, countdown=2 ** (self.request.retries + 1)) from exc
     return result
+
+
+@celery_app.task
+def recover_active_rooms() -> dict[str, int]:
+    """Réconcilie les salles actives et les tâches perdues depuis les événements persistés."""
+
+    settings = get_settings()
+    client = Redis.from_url(settings.redis_url)
+    scheduled = 0
+    try:
+        # Un seul balayage à la fois, même si deux planificateurs démarrent par erreur.
+        lock = client.lock("ai-agora:recovery", timeout=60)
+        if not lock.acquire(blocking=False):
+            return {"scheduled": 0}
+        try:
+            now = datetime.now(timezone.utc)
+            with SessionLocal() as db:
+                rooms = db.scalars(select(Room).where(Room.status == RoomStatus.RUNNING)).all()
+                for room in rooms:
+                    started = room.started_at
+                    if started and started.tzinfo is None:
+                        started = started.replace(tzinfo=timezone.utc)
+                    if room.amount_spent >= room.budget_limit or (
+                        started and now - started >= timedelta(minutes=room.max_duration_minutes)
+                    ):
+                        continue
+                    if client.exists(f"ai-agora:room:{room.id}:turn"):
+                        continue
+                    event = db.scalar(
+                        select(ConversationEvent)
+                        .where(
+                            ConversationEvent.room_id == room.id,
+                            ConversationEvent.event_type == "message.created",
+                        )
+                        .order_by(ConversationEvent.sequence.desc())
+                        .limit(1)
+                    )
+                    if not event:
+                        continue
+                    marker = cast(
+                        bytes | str | None,
+                        client.get(f"ai-agora:room:{room.id}:scheduled:{event.id}"),
+                    )
+                    try:
+                        age = time.time() - float(marker) if marker else float("inf")
+                    except (ValueError, TypeError):
+                        age = float("inf")  # Compatibilité avec l'ancien marqueur « 1 ».
+                    if age < settings.room_recovery_stale_seconds:
+                        continue
+                    if schedule_room_turn(str(room.id), str(event.id), force=True):
+                        scheduled += 1
+        finally:
+            lock.release()
+    finally:
+        client.close()
+    return {"scheduled": scheduled}

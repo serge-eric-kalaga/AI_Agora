@@ -44,6 +44,9 @@ services:
       ALLOW_PRIVATE_PROVIDER_ENDPOINTS: ${ALLOW_PRIVATE_PROVIDER_ENDPOINTS:-true}
       AUTONOMOUS_TURN_DELAY_SECONDS: ${AUTONOMOUS_TURN_DELAY_SECONDS:-4}
       ROOM_TURN_LOCK_SECONDS: ${ROOM_TURN_LOCK_SECONDS:-180}
+      LOCAL_PROVIDER_CONCURRENCY: ${LOCAL_PROVIDER_CONCURRENCY:-1}
+      ROOM_RECOVERY_INTERVAL_SECONDS: ${ROOM_RECOVERY_INTERVAL_SECONDS:-30}
+      ROOM_RECOVERY_STALE_SECONDS: ${ROOM_RECOVERY_STALE_SECONDS:-180}
       RUN_MIGRATIONS: "true"
     depends_on:
       postgres:
@@ -77,6 +80,19 @@ services:
         condition: service_healthy
     extra_hosts:
       - "host.docker.internal:host-gateway"
+    networks: [data]
+
+  scheduler:
+    build:
+      context: ./backend
+    restart: unless-stopped
+    command: ["celery", "-A", "api.celery_app:celery_app", "beat", "--loglevel=INFO", "--schedule=/tmp/agora-celerybeat"]
+    environment:
+      <<: *backend_environment
+      RUN_MIGRATIONS: "false"
+    depends_on:
+      backend:
+        condition: service_healthy
     networks: [data]
 
   frontend:

@@ -1,5 +1,6 @@
 """Validation des fournisseurs et du tour d'agent sans appel externe."""
 
+from contextlib import nullcontext
 from datetime import datetime, timezone
 from uuid import UUID, uuid4
 
@@ -54,6 +55,7 @@ def _agent_payload(provider_id: str, name: str) -> dict[str, object]:
 def test_local_turn_is_idempotent_and_accounts_for_tokens(
     client: TestClient, account: dict[str, object], monkeypatch
 ) -> None:
+    monkeypatch.setattr("api.services.orchestration.local_generation_slot", lambda _: nullcontext())
     headers = account["headers"]
     workspace_id = account["workspaceId"]
     assert isinstance(headers, dict)
@@ -118,6 +120,8 @@ def test_local_turn_is_idempotent_and_accounts_for_tokens(
     monkeypatch.setattr("api.services.orchestration.generate_model_response", fake_generation)
 
     result = execute_room_turn(UUID(room["id"]), event_id)
+    # Une erreur système ne doit pas effacer la dernière cible conversationnelle.
+    record_room_failure(UUID(room["id"]), UUID(result["eventId"]), "temporary_outage")
     followup = execute_room_turn(UUID(room["id"]), UUID(result["eventId"]))
     replay = execute_room_turn(UUID(room["id"]), event_id)
 
@@ -225,7 +229,7 @@ def test_local_turn_is_idempotent_and_accounts_for_tokens(
                 Message.room_id == UUID(room["id"]), Message.kind == MessageKind.SYSTEM
             )
         )
-    assert failures == 1
+    assert failures == 2
 
 
 def test_ollama_request_disables_hidden_reasoning(monkeypatch) -> None:

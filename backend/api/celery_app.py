@@ -14,5 +14,13 @@ celery_app.conf.update(
     task_acks_late=True,
     worker_prefetch_multiplier=1,
     task_track_started=True,
+    task_reject_on_worker_lost=True,
+    broker_connection_retry_on_startup=True,
+    beat_schedule={
+        "recover-active-rooms": {
+            "task": "api.tasks.recover_active_rooms",
+            "schedule": settings.room_recovery_interval_seconds,
+        }
+    },
 )
 celery_app.autodiscover_tasks(["api"])
