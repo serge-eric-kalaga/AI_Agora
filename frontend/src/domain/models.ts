@@ -56,6 +56,12 @@ export const messageSchema = z.object({
     .optional(),
   replyTo: z.string().optional(),
 });
+export const conversationSettingsSchema = z.object({
+  pace: z.enum(['calm', 'normal', 'animated']).default('normal'),
+  autonomy: z.enum(['guided', 'balanced', 'free']).default('free'),
+  responseLength: z.enum(['brief', 'standard', 'detailed']).default('brief'),
+});
+export type ConversationSettings = z.infer<typeof conversationSettingsSchema>;
 export const roomSchema = z.object({
   id: z.string(),
   name: z.string().min(1),
@@ -72,6 +78,7 @@ export const roomSchema = z.object({
   spent: z.number().nonnegative(),
   maxMessages: z.number().positive().nullable(),
   maxMinutes: z.number().positive(),
+  conversationSettings: conversationSettingsSchema.optional(),
   tokens: z.number().nonnegative(),
   localTokens: z.number().nonnegative(),
   simulatedTurns: z.number().nonnegative(),

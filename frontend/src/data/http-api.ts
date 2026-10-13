@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { conversationSettingsSchema, type ConversationSettings } from '@/domain/models';
 import type {
   Agent,
   AgentDraft,
@@ -70,6 +71,7 @@ const roomReadSchema = z.object({
   amountSpent: z.coerce.number(),
   maxMessages: z.number().nullable(),
   maxDurationMinutes: z.number(),
+  conversationSettings: conversationSettingsSchema,
   cloudTokens: z.number(),
   localTokens: z.number(),
   version: z.number().int().positive(),
@@ -228,6 +230,7 @@ function mapRoom(value: z.infer<typeof roomReadSchema>): Room {
     spent: value.amountSpent,
     maxMessages: value.maxMessages,
     maxMinutes: value.maxDurationMinutes,
+    conversationSettings: value.conversationSettings,
     tokens: value.cloudTokens,
     localTokens: value.localTokens,
     simulatedTurns: 0,
@@ -603,5 +606,22 @@ export function refreshMemory(workspaceId: string, roomId: string) {
     `/api/backend/workspaces/${workspaceId}/rooms/${roomId}/memory`,
     z.object({ status: z.string() }),
     { method: 'POST' },
+  );
+}
+
+export async function updateConversationSettings(
+  workspaceId: string,
+  room: Room,
+  settings: ConversationSettings,
+) {
+  return mapRoom(
+    await request(
+      `/api/backend/workspaces/${workspaceId}/rooms/${room.id}/conversation-settings`,
+      roomReadSchema,
+      {
+        method: 'PATCH',
+        body: JSON.stringify({ ...settings, expectedVersion: room.version }),
+      },
+    ),
   );
 }

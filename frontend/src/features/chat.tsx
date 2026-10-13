@@ -32,6 +32,7 @@ import { usePersistentBoolean } from '@/components/persistent-state';
 import { Avatar, Badge, Empty, Modal, Progress, Status } from '@/components/ui';
 import { ToolChips } from './agents';
 import { ConversationMemoryPanel } from './conversation-memory';
+import { ConversationSettingsPanel } from './conversation-settings';
 import { effectiveTools } from '@/domain/engine';
 import { downloadJson } from '@/data/repository';
 import { t, formatMoney, formatTime } from '@/i18n';
@@ -470,7 +471,10 @@ function ChatRoom({ room }: { room: Room }) {
         ))}
       </div>
       {mode === 'api' && (
-        <ConversationMemoryPanel key={room.id} roomId={room.id} onNavigate={jumpToMessage} />
+        <>
+          <ConversationSettingsPanel key={`${room.id}:${room.version}`} room={room} />
+          <ConversationMemoryPanel key={room.id} roomId={room.id} onNavigate={jumpToMessage} />
+        </>
       )}
       {mode === 'demo' && (
         <button

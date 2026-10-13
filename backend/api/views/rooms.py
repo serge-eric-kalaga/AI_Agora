@@ -38,6 +38,8 @@ from api.errors import ConflictError, DomainError, NotFoundError
 from api.schemas.common import Page
 from api.schemas.memory import MemoryRead
 from api.schemas.rooms import (
+    ConversationSettings,
+    ConversationSettingsUpdate,
     EventRead,
     MessageCreate,
     MessageRead,
@@ -91,6 +93,7 @@ def _room_read(room: Room) -> RoomRead:
         cloud_tokens=room.cloud_tokens,
         local_tokens=room.local_tokens,
         version=room.version,
+        conversation_settings=ConversationSettings.model_validate(room.conversation_settings or {}),
         participants=[
             ParticipantRead(
                 agent_id=item.agent_id,
@@ -732,3 +735,51 @@ def request_memory(
     )
     db.commit()
     return {"status": "queued"}
+
+
+@router.patch(
+    "/{room_id}/conversation-settings",
+    response_model=RoomRead,
+    summary="Régler le rythme, l'autonomie et la longueur des réponses",
+    description="Réservé aux membres pouvant écrire. Le contrôle de version et le verrou serveur évitent les écrasements concurrents. Les réglages prennent effet au prochain tour ; ils ne coupent pas une génération en cours. La capacité réelle d'Ollama peut prolonger la pause minimale.",
+    responses={
+        403: {"description": "Observateur ou membre non autorisé"},
+        409: {"description": "Version obsolète"},
+    },
+)
+def update_conversation_settings(
+    workspace_id: UUID,
+    room_id: UUID,
+    payload: ConversationSettingsUpdate,
+    db: DbSession,
+    current_user: CurrentUser,
+) -> RoomRead:
+    require_workspace_editor(db, workspace_id, current_user)
+    room = db.scalar(
+        _room_query().where(Room.id == room_id, Room.workspace_id == workspace_id).with_for_update()
+    )
+    if not room:
+        raise NotFoundError("room_not_found", "La salle est introuvable.")
+    if room.version != payload.expected_version:
+        raise ConflictError(
+            "stale_room_version", "La salle a changé ; rechargez-la avant de réessayer."
+        )
+    room.conversation_settings = payload.model_dump(exclude={"expected_version"})
+    room.version += 1
+    append_room_event(
+        db,
+        room.id,
+        "room.settings.updated",
+        {"version": room.version},
+        actor_user_id=current_user.id,
+    )
+    record_audit(
+        db,
+        action="room.settings.updated",
+        resource_type="room",
+        resource_id=room.id,
+        actor_user_id=current_user.id,
+        workspace_id=workspace_id,
+    )
+    db.commit()
+    return _room_read(room)

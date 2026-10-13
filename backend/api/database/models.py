@@ -207,6 +207,8 @@ class Room(Base, TimestampMixin):
     started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     stopped_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
+    conversation_settings: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+
     participants: Mapped[list[RoomParticipant]] = relationship(
         back_populates="room", cascade="all, delete-orphan"
     )

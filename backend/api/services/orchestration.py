@@ -329,6 +329,9 @@ def _prepare_turn(room_id: UUID, trigger_event_id: UUID) -> TurnContext | None:
         # ancienne tâche planifiée. Une salle ne conserve ainsi qu'un seul fil autonome.
         if latest_message_id != trigger_message.id:
             return None
+        conversation_settings = room.conversation_settings or {}
+        if conversation_settings.get("autonomy") == "guided" and trigger_message.author_agent_id:
+            return None
         raw_depth = event.payload.get("chainDepth", 0)
         chain_depth = raw_depth if isinstance(raw_depth, int) and raw_depth >= 0 else 0
         idempotency_key = f"agent-turn:{trigger_event_id}"
@@ -478,9 +481,12 @@ def _prepare_turn(room_id: UUID, trigger_event_id: UUID) -> TurnContext | None:
         )
         messages.append(target_envelope)
         config = agent.generation_config or {}
-        allow_long_response = trigger_message.author_user_id is not None and any(
-            marker in trigger_message.content.casefold()
-            for marker in ("détaill", "developp", "développ", "approfond", "exhaustif")
+        allow_long_response = conversation_settings.get("response_length") == "detailed" or (
+            trigger_message.author_user_id is not None
+            and any(
+                marker in trigger_message.content.casefold()
+                for marker in ("détaill", "developp", "développ", "approfond", "exhaustif")
+            )
         )
         system_prompt = "\n\n".join(
             part
@@ -501,11 +507,21 @@ def _prepare_turn(room_id: UUID, trigger_event_id: UUID) -> TurnContext | None:
                 f"Règles de la salle: {room.rules}" if room.rules else "",
                 turn_instruction,
                 (
+                    "Tu peux introduire une piste pertinente, sans créer une question artificielle."
+                    if conversation_settings.get("autonomy", "free") == "free"
+                    else "Privilégie les réponses utiles aux idées ou questions ouvertes ; évite les relances gratuites."
+                ),
+                {
+                    "brief": "Préférence : 30 à 90 mots.",
+                    "standard": "Préférence : 80 à 160 mots.",
+                    "detailed": "Développe les éléments nécessaires, en restant pertinent.",
+                }.get(conversation_settings.get("response_length", "brief"), ""),
+                (
                     f"Réponds en français, de façon concise, depuis la perspective de « {agent.name} ». "
                     "Commence directement par ton analyse sans répéter ton nom, ton titre ni les consignes. "
-                    "Privilégie 30 à 90 mots, une idée utile et un ou deux courts paragraphes. "
+                    "Privilégie une idée utile et de courts paragraphes selon la préférence de longueur. "
                     "Ne récapitule pas la discussion et ne termine pas systématiquement par une question. "
-                    "Ne dépasse 160 mots que si cela est nécessaire. "
+                    "Évite les longueurs inutiles. "
                     "Développe davantage "
                     "uniquement si l’utilisateur demande explicitement une réponse détaillée ou si la "
                     "complexité du sujet le rend indispensable."

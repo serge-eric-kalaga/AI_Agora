@@ -106,7 +106,7 @@ def continue_room_turn(self, room_id: str, trigger_event_id: str) -> dict[str, s
                 schedule_room_turn(
                     room_id,
                     next_event_id,
-                    countdown=get_settings().autonomous_turn_delay_seconds,
+                    countdown=conversation_delay(room_uuid),
                 )
             except (OperationalError, RedisError) as exc:
                 raise self.retry(exc=exc, countdown=2 ** (self.request.retries + 1)) from exc
@@ -150,6 +150,10 @@ def recover_active_rooms() -> dict[str, int]:
                     )
                     if not event:
                         continue
+                    if (room.conversation_settings or {}).get(
+                        "autonomy"
+                    ) == "guided" and event.actor_agent_id:
+                        continue
                     marker = cast(
                         bytes | str | None,
                         client.get(f"ai-agora:room:{room.id}:scheduled:{event.id}"),
@@ -167,6 +171,17 @@ def recover_active_rooms() -> dict[str, int]:
     finally:
         client.close()
     return {"scheduled": scheduled}
+
+
+def conversation_delay(room_id: UUID) -> int:
+    """La cadence concerne la pause ; la génération peut rester plus lente."""
+    with SessionLocal() as db:
+        room = db.get(Room, room_id)
+        if not room:
+            return get_settings().autonomous_turn_delay_seconds
+        preferences = room.conversation_settings or {}
+        delay = {"calm": 30, "normal": 10, "animated": 3}.get(preferences.get("pace", "normal"), 10)
+        return delay * (2 if preferences.get("autonomy") == "balanced" else 1)
 
 
 @celery_app.task(bind=True, max_retries=None)

@@ -12,6 +12,25 @@ from api.database.models import MessageKind, RoomMode, RoomStatus, RoomVisibilit
 from .common import APIModel
 
 
+class ConversationSettings(APIModel):
+    pace: Literal["calm", "normal", "animated"] = Field(
+        default="normal",
+        description="Pause minimale entre deux générations : 30, 10 ou 3 secondes.",
+    )
+    autonomy: Literal["guided", "balanced", "free"] = Field(
+        default="free",
+        description="Guidée : réponse aux humains. Équilibrée : échanges mesurés. Libre : initiatives autonomes.",
+    )
+    response_length: Literal["brief", "standard", "detailed"] = Field(
+        default="brief",
+        description="Préférence de longueur ; une demande explicite de détail reste prioritaire.",
+    )
+
+
+class ConversationSettingsUpdate(ConversationSettings):
+    expected_version: int = Field(ge=1, description="Version de la salle lue avant modification.")
+
+
 class RoomCreate(APIModel):
     name: str = Field(min_length=2, max_length=120, examples=["Conseil stratégique"])
     description: str = Field(default="", max_length=2_000)
@@ -30,6 +49,7 @@ class RoomCreate(APIModel):
         description="Champ historique accepté pour compatibilité. Les conversations ne sont plus plafonnées.",
     )
     max_duration_minutes: int = Field(default=60, ge=1, le=43_200)
+    conversation_settings: ConversationSettings = Field(default_factory=ConversationSettings)
     participant_ids: list[UUID] = Field(min_length=2)
 
     @model_validator(mode="after")
@@ -66,6 +86,7 @@ class RoomRead(APIModel):
     cloud_tokens: int
     local_tokens: int
     version: int
+    conversation_settings: ConversationSettings
     participants: list[ParticipantRead]
     started_at: datetime | None
     stopped_at: datetime | None

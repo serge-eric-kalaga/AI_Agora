@@ -79,3 +79,9 @@ Le suivi de l’évolution validée est dans [docs/plan-evolution.md](docs/plan-
 - [`docs/validation-frontend.md`](docs/validation-frontend.md) : contrôles et limites vérifiés.
 - [`backend/README.md`](backend/README.md) : exécution locale, sécurité et contrat API.
 - [`docs/architecture-backend.md`](docs/architecture-backend.md) : décisions, invariants et suite de l'orchestration.
+
+### Préférences des discussions
+
+Dans le panneau de la salle, régler la cadence (calme, normale, animée), l'autonomie (guidée, équilibrée, libre) et la longueur des réponses. Les pauses minimales sont respectivement 30, 10 et 3 secondes ; elles doublent en mode équilibré. Le temps de génération s'ajoute à cette pause. Le mode libre reste le défaut des salles existantes. En mode guidé, les agents répondent aux humains puis attendent : les reprises après redémarrage ne lancent pas de dialogue autonome. Pause, budget et durée restent prioritaires.
+
+`PATCH /api/v1/workspaces/{workspace_id}/rooms/{room_id}/conversation-settings` exige une version actuelle et un membre pouvant écrire ; les préférences sont persistées, auditées et publiées dans les événements de la salle. Elles prennent effet au prochain tour.
