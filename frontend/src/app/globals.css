@@ -3981,3 +3981,16 @@ td > svg {
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
+
+.collaborator-row { display: flex; flex-wrap: wrap; align-items: center; gap: 1rem; padding: 1rem 0; border-bottom: 1px solid var(--border); }
+.collaborator-row > div { flex: 1; min-width: 12rem; }
+.notification-item { padding: 1.25rem; margin-bottom: 1rem; border: 1px solid var(--border); border-radius: 12px; }
+.notification-item.unread { border-left: 3px solid #a89aff; }
+.notification-item > div { display: flex; flex-wrap: wrap; gap: .75rem; margin-top: 1rem; }
+
+.collaboration-panel { padding: 1.25rem; margin: 1.5rem 0; }
+.collaboration-panel fieldset { border: 0; margin: 0; padding: 0; min-width: 0; }
+.collaboration-panel ul { padding: 0; list-style: none; }
+.collaboration-panel .collaborator-row { overflow-wrap: anywhere; }
+.collaboration-panel .collaborator-row > div { min-width: 0; flex-basis: 12rem; }
+.collaboration-panel input, .collaboration-panel select { max-width: 100%; }

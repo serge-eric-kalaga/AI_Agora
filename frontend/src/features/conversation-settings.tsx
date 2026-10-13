@@ -13,7 +13,7 @@ export function ConversationSettingsPanel({ room }: { room: Room }) {
   const [saving, setSaving] = useState(false);
   const [tools, setTools] = useState(room.tools);
   const editable =
-    workspaces.find((workspace) => workspace.id === activeWorkspaceId)?.role !== 'viewer';
+    workspaces.find((workspace) => workspace.id === activeWorkspaceId)?.role !== 'observer';
   async function save(event: FormEvent) {
     event.preventDefault();
     if (!activeWorkspaceId || saving) return;

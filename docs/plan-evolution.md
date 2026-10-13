@@ -1,6 +1,8 @@
 # Évolution AI Agora — objectif accepté le 13/10/2026
 
 Livrer et vérifier toutes les améliorations et fonctionnalités acceptées, par lots autonomes.
+
+Extension acceptée : fournir un compte superadmin local et une interface sécurisée permettant de voir tous les utilisateurs et toutes les salles, dans tous les espaces. Communiquer les identifiants de chaque compte local utilisé pour la validation.
 Les statuts ci-dessous représentent l'intégration et la validation réelles.
 
 | Lot | Périmètre | État |
@@ -12,7 +14,8 @@ Les statuts ci-dessous représentent l'intégration et la validation réelles.
 | 5 | Synthèses avec références aux messages | Livré : Ollama, PostgreSQL, navigateur et navigation vers les références validés |
 | 6 | Documents PDF/texte et consultation de sources référencées | Livré : 48 tests backend, extraction PDF, permissions, URL publiques contrôlées ; document/source/citation Ollama et téléchargement réel validés |
 | 7 | Invitations, rôles et notifications de mentions/réponses | À réaliser |
-| 8 | Vérification transverse, documentation, déploiement local | À réaliser |
+| 8 | Vérification transverse, documentation, déploiement local | Sessions durables livrées ; vérification finale à réaliser |
+| 9 | Compte superadmin, vue globale utilisateurs et salles | À réaliser |
 
 ## Critères communs
 

@@ -1,6 +1,6 @@
 import { backendFetch, hasTrustedOrigin, publicBackendResponse } from '@/server/backend';
 
-const allowedRoots = new Set(['workspaces']);
+const allowedRoots = new Set(['workspaces', 'admin']);
 
 async function proxy(request: Request, context: { params: Promise<{ path: string[] }> }) {
   const source = new URL(request.url);

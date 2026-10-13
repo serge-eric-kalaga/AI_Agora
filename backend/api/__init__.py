@@ -14,8 +14,10 @@ from api.errors import DomainError
 from api.middleware.request_context import RequestContextMiddleware
 from api.schemas.common import ErrorResponse
 from api.views import (
+    admin_router,
     agents_router,
     auth_router,
+    collaboration_router,
     health_router,
     providers_router,
     resources_router,
@@ -108,6 +110,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     )
 
     for router in (
+        collaboration_router,
+        admin_router,
         auth_router,
         workspaces_router,
         providers_router,

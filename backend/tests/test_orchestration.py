@@ -135,10 +135,10 @@ def test_local_turn_is_idempotent_and_accounts_for_tokens(
     assert "Historique de référence" in requests[0].messages[-2]["content"]
     assert all(message["role"] == "user" for message in requests[0].messages)
     assert "type_auteur=humain" in requests[0].messages[-1]["content"]
-    assert "auteur_affiche=Vous" in requests[0].messages[-1]["content"]
+    assert "auteur_affiche=architecte" in requests[0].messages[-1]["content"]
     assert "dernier message vient de l’utilisateur humain" in requests[0].system_prompt
     assert requests[1].messages[-2]["role"] == "user"
-    assert '"auteur": "Vous"' in requests[1].messages[-2]["content"]
+    assert '"auteur": "architecte"' in requests[1].messages[-2]["content"]
     assert "type_auteur=agent" in requests[1].messages[-1]["content"]
     assert "auteur_affiche=Mini B" in requests[1].messages[-1]["content"]
     assert "dernier message vient de l’agent « Mini B »" in requests[1].system_prompt
@@ -171,7 +171,7 @@ def test_local_turn_is_idempotent_and_accounts_for_tokens(
             generated_by_agent[UUID(agents[1]["id"])].metadata_json["replyToAuthorKind"] == "humain"
         )
         assert (
-            generated_by_agent[UUID(agents[1]["id"])].metadata_json["replyToAuthorName"] == "Vous"
+            generated_by_agent[UUID(agents[1]["id"])].metadata_json["replyToAuthorName"] == "architecte"
         )
         assert (
             generated_by_agent[UUID(agents[0]["id"])].metadata_json["replyToAuthorKind"] == "agent"

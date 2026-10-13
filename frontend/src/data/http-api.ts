@@ -16,6 +16,7 @@ const userSchema = z.object({
   email: z.string(),
   username: z.string(),
   isActive: z.boolean(),
+  isSuperadmin: z.boolean().default(false),
   createdAt: z.string(),
 });
 const workspaceSchema = z.object({
@@ -23,7 +24,7 @@ const workspaceSchema = z.object({
   name: z.string(),
   slug: z.string(),
   ownerId: z.string(),
-  role: z.enum(['owner', 'editor', 'viewer']).nullable(),
+  role: z.enum(['owner', 'admin', 'member', 'observer']).nullable(),
   createdAt: z.string(),
 });
 const providerReadSchema = z.object({
@@ -85,6 +86,8 @@ const messageReadSchema = z.object({
   id: z.string(),
   roomId: z.string(),
   authorAgentId: z.string().nullable(),
+  authorUserName: z.string().nullable().optional(),
+  isMe: z.boolean().optional(),
   replyToId: z.string().nullable(),
   threadRootId: z.string().nullable().optional(),
   kind: z.enum(['message', 'system']),
@@ -271,6 +274,8 @@ function mapMessage(value: z.infer<typeof messageReadSchema>): Message {
     id: value.id,
     roomId: value.roomId,
     agentId: value.authorAgentId,
+    authorName: value.authorUserName ?? undefined,
+    isMe: value.isMe,
     kind: value.kind,
     text: value.content,
     createdAt: value.createdAt,

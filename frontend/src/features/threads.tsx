@@ -202,7 +202,8 @@ export function ThreadPanel({
       <div className="thread-root" id={`thread-message-${rootId}`}>
         <strong>
           {t.threads.root} ·{' '}
-          {state.agents.find((agent) => agent.id === root?.agentId)?.name ?? t.common.you}
+          {state.agents.find((agent) => agent.id === root?.agentId)?.name ??
+            (root?.isMe === false ? (root.authorName ?? t.common.you) : t.common.you)}
         </strong>
         <p>{root?.text ?? t.threads.loading}</p>
       </div>
@@ -231,7 +232,8 @@ export function ThreadPanel({
             className={message.id === focusId ? 'message-highlighted' : undefined}
           >
             <strong>
-              {state.agents.find((agent) => agent.id === message.agentId)?.name ?? t.common.you}
+              {state.agents.find((agent) => agent.id === message.agentId)?.name ??
+                (message.isMe === false ? (message.authorName ?? t.common.you) : t.common.you)}
             </strong>{' '}
             <time dateTime={message.createdAt}>{formatTime(message.createdAt)}</time>
             {message.replyTo && (
@@ -281,8 +283,9 @@ export function ThreadPanel({
         {reply && (
           <button type="button" className="reply-context" onClick={() => setReply(null)}>
             {t.chat.replyTo}{' '}
-            {state.agents.find((agent) => agent.id === reply.agentId)?.name ?? t.common.you} ·{' '}
-            {reply.text.slice(0, 100)} ×
+            {state.agents.find((agent) => agent.id === reply.agentId)?.name ??
+              (reply.isMe === false ? (reply.authorName ?? t.common.you) : t.common.you)}{' '}
+            · {reply.text.slice(0, 100)} ×
           </button>
         )}
         <label className="field">

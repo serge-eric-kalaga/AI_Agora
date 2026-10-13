@@ -225,6 +225,38 @@ function ChatRoom({ room }: { room: Room }) {
     },
     [loadOlderMessages, notify, room.id],
   );
+  const jumpToMessage = useCallback(
+    async (messageId: string) => {
+      followsLatest.current = false;
+      setShowScrollToBottom(true);
+      let target = document.getElementById(`message-${messageId}`);
+      if (!target && mode === 'api' && activeWorkspaceId) {
+        const context = await readMessageContext(activeWorkspaceId, room.id, messageId);
+        const requested = context.find((message) => message.id === messageId);
+        if (requested?.threadRootId) {
+          setThreadFocus(requested.id);
+          setThreadRoot(requested.threadRootId);
+          return;
+        }
+      }
+      while (!target && olderCursor.current) {
+        const page = await fetchOlderMessages(false);
+        if (!page) break;
+        if (page.messages.some((message) => message.id === messageId)) {
+          await new Promise<void>((resolve) =>
+            requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
+          );
+          target = document.getElementById(`message-${messageId}`);
+        }
+      }
+      if (!target) return;
+      target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      setHighlightedMessageId(messageId);
+      if (highlightTimer.current) clearTimeout(highlightTimer.current);
+      highlightTimer.current = setTimeout(() => setHighlightedMessageId(null), 1800);
+    },
+    [activeWorkspaceId, fetchOlderMessages, mode, room.id],
+  );
   useEffect(() => {
     if ('scrollRestoration' in window.history) window.history.scrollRestoration = 'manual';
   }, []);
@@ -281,6 +313,8 @@ function ChatRoom({ room }: { room: Room }) {
         restoringScroll.current = false;
         setShowScrollToBottom(!followsLatest.current);
         saveScrollPosition(room.id, list);
+        const requestedMessage = new URLSearchParams(window.location.search).get('message');
+        if (requestedMessage) await jumpToMessage(requestedMessage);
       })
       .catch((cause) => {
         restoringScroll.current = false;
@@ -290,7 +324,7 @@ function ChatRoom({ room }: { room: Room }) {
       cancelled = true;
       unsubscribe();
     };
-  }, [fetchOlderMessages, loadRoom, mode, notify, room.id, subscribeRoom]);
+  }, [fetchOlderMessages, jumpToMessage, loadRoom, mode, notify, room.id, subscribeRoom]);
   useEffect(
     () => () => {
       if (highlightTimer.current) clearTimeout(highlightTimer.current);
@@ -312,35 +346,6 @@ function ChatRoom({ room }: { room: Room }) {
       if (saveScrollFrame.current !== null) cancelAnimationFrame(saveScrollFrame.current);
     };
   }, [room.id]);
-  async function jumpToMessage(messageId: string) {
-    followsLatest.current = false;
-    setShowScrollToBottom(true);
-    let target = document.getElementById(`message-${messageId}`);
-    if (!target && mode === 'api' && activeWorkspaceId) {
-      const context = await readMessageContext(activeWorkspaceId, room.id, messageId);
-      const requested = context.find((message) => message.id === messageId);
-      if (requested?.threadRootId) {
-        setThreadFocus(requested.id);
-        setThreadRoot(requested.threadRootId);
-        return;
-      }
-    }
-    while (!target && olderCursor.current) {
-      const page = await fetchOlderMessages(false);
-      if (!page) break;
-      if (page.messages.some((message) => message.id === messageId)) {
-        await new Promise<void>((resolve) =>
-          requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
-        );
-        target = document.getElementById(`message-${messageId}`);
-      }
-    }
-    if (!target) return;
-    target.scrollIntoView({ behavior: 'smooth', block: 'center' });
-    setHighlightedMessageId(messageId);
-    if (highlightTimer.current) clearTimeout(highlightTimer.current);
-    highlightTimer.current = setTimeout(() => setHighlightedMessageId(null), 1800);
-  }
   function scrollToBottom() {
     followsLatest.current = true;
     setShowScrollToBottom(false);
@@ -660,11 +665,16 @@ function ChatRoom({ room }: { room: Room }) {
                 {agent ? <Avatar agent={agent} /> : <span className="human-avatar">EX</span>}
                 <div className="message-content">
                   <div className="message-meta">
-                    <strong>{agent?.name ?? t.common.you}</strong>
+                    <strong>
+                      {agent?.name ??
+                        (message.isMe === false
+                          ? (message.authorName ?? t.common.you)
+                          : t.common.you)}
+                    </strong>
                     <time dateTime={message.createdAt}>{formatTime(message.createdAt)}</time>
                     <button
                       className="icon-button message-reply"
-                      aria-label={`${t.chat.reply} ${agent?.name ?? t.common.you}`}
+                      aria-label={`${t.chat.reply} ${agent?.name ?? (message.isMe === false ? (message.authorName ?? t.common.you) : t.common.you)}`}
                       onClick={() => {
                         setReplyTo(message);
                         composer.current?.focus();

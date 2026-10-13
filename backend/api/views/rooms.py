@@ -55,6 +55,7 @@ from api.schemas.rooms import (
 )
 from api.services.audit import record_audit
 from api.services.events import append_room_event
+from api.services.notifications import notify_message
 
 router = APIRouter(prefix="/workspaces/{workspace_id}/rooms", tags=["Arènes"])
 logger = logging.getLogger(__name__)
@@ -182,7 +183,20 @@ def _message_read(db: DbSession, message: Message, user_id: UUID) -> MessageRead
         id=message.id,
         room_id=message.room_id,
         author_user_id=message.author_user_id,
+        author_user_name=(
+            author.username if (author := db.get(User, message.author_user_id)) else None
+        )
+        if message.author_user_id
+        else None,
+        is_me=message.author_user_id == user_id,
         author_agent_id=message.author_agent_id,
+        author_agent_name=(
+            author_agent.name
+            if (author_agent := db.get(AgentDefinition, message.author_agent_id))
+            else None
+        )
+        if message.author_agent_id
+        else None,
         reply_to_id=message.reply_to_id,
         thread_root_id=message.thread_root_id,
         kind=message.kind,
@@ -571,6 +585,7 @@ def create_message(
     )
     db.add(message)
     db.flush()
+    notify_message(db, room, message)
     event = append_room_event(
         db,
         room.id,

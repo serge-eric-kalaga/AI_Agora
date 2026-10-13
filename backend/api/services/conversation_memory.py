@@ -14,6 +14,7 @@ from api.database.models import (
     ProviderKind,
     Room,
     RoomMemory,
+    RoomParticipant,
 )
 from api.schemas.memory import MemoryState
 
@@ -87,6 +88,18 @@ def refresh_memory(room_id: UUID, *, force: bool = False) -> dict[str, str]:
                 )
             )
         )
+        if not agent:
+            agent = db.scalar(
+                select(AgentDefinition)
+                .join(RoomParticipant, RoomParticipant.agent_id == AgentDefinition.id)
+                .where(
+                    RoomParticipant.room_id == room_id,
+                    RoomParticipant.is_active.is_(True),
+                    AgentDefinition.is_active.is_(True),
+                )
+                .order_by(AgentDefinition.id)
+                .limit(1)
+            )
         if not agent:
             return {"status": "skipped"}
         provider = db.get(ProviderConnection, agent.provider_id)

@@ -139,7 +139,10 @@ class MessageRead(APIModel):
     id: UUID
     room_id: UUID
     author_user_id: UUID | None
+    author_user_name: str | None = None
+    is_me: bool = False
     author_agent_id: UUID | None
+    author_agent_name: str | None = None
     reply_to_id: UUID | None
     thread_root_id: UUID | None = None
     kind: MessageKind

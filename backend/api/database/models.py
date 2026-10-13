@@ -97,6 +97,7 @@ class User(Base, TimestampMixin):
     username: Mapped[str] = mapped_column(String(80), unique=True, index=True)
     password_hash: Mapped[str] = mapped_column(String(255))
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    is_superadmin: Mapped[bool] = mapped_column(Boolean, default=False)
 
     memberships: Mapped[list[WorkspaceMember]] = relationship(
         back_populates="user", cascade="all, delete-orphan"
@@ -393,3 +394,29 @@ class RoomResource(Base, TimestampMixin):
     content: Mapped[str] = mapped_column(Text)
     original: Mapped[bytes | None] = mapped_column(LargeBinary, nullable=True)
     digest: Mapped[str] = mapped_column(String(64))
+
+
+class WorkspaceInvitation(Base, TimestampMixin):
+    """Invitation à usage unique, liée à l'adresse du compte destinataire."""
+    __tablename__ = "workspace_invitations"
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    workspace_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("workspaces.id", ondelete="CASCADE"), index=True)
+    email: Mapped[str] = mapped_column(String(320))
+    role: Mapped[WorkspaceRole] = mapped_column(Enum(WorkspaceRole))
+    token_hash: Mapped[str] = mapped_column(String(64), unique=True)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    accepted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class Notification(Base):
+    """Notification durable d'une mention ou réponse adressée à un humain."""
+    __tablename__ = "notifications"
+    __table_args__ = (UniqueConstraint("user_id", "message_id"),)
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    workspace_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("workspaces.id", ondelete="CASCADE"), index=True)
+    user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    message_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("messages.id", ondelete="CASCADE"))
+    kind: Mapped[str] = mapped_column(String(20))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    read_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))

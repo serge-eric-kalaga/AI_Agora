@@ -23,7 +23,9 @@ from api.database.models import (
     RoomMemory,
     RoomParticipant,
     RoomStatus,
+    User,
 )
+from api.services.notifications import notify_message
 from api.services.resources import resolve_citations, resource_context
 
 from .events import append_room_event
@@ -98,7 +100,7 @@ def _initiative_for(trigger_event_id: UUID) -> str:
 
 
 def _target_message_envelope(
-    message: Message, participant_names: dict[UUID, str]
+    message: Message, participant_names: dict[UUID, str], human_name: str = "Vous"
 ) -> tuple[dict[str, str], str, str]:
     """Encode sans ambiguïté l'auteur et le contenu auxquels le tour doit répondre."""
 
@@ -108,9 +110,9 @@ def _target_message_envelope(
         identity_rule = f"Réponds d’abord à l’agent « {author_name} »."
     else:
         author_kind = "humain"
-        author_name = "Vous"
+        author_name = human_name
         identity_rule = (
-            "Réponds d’abord à l’utilisateur humain affiché « Vous ». Cet humain n’est aucun des "
+            f"Réponds d’abord à l’utilisateur humain affiché « {human_name} ». Cet humain n’est aucun des "
             "agents de la salle et ne doit recevoir le nom ou le titre d’aucun participant."
         )
     envelope = {
@@ -463,7 +465,11 @@ def _prepare_turn(room_id: UUID, trigger_event_id: UUID) -> TurnContext | None:
             {
                 "auteur": names.get(message.author_agent_id, "Agent")
                 if message.author_agent_id
-                else "Vous",
+                else (
+                    historical_user.username
+                    if (historical_user := db.get(User, message.author_user_id))
+                    else "Vous"
+                ),
                 "type": "agent" if message.author_agent_id else "humain",
                 "contenu": message.content[:1_400],
             }
@@ -510,7 +516,11 @@ def _prepare_turn(room_id: UUID, trigger_event_id: UUID) -> TurnContext | None:
                 }
             )
         target_envelope, target_author_kind, target_author_name = _target_message_envelope(
-            trigger_message, names
+            trigger_message,
+            names,
+            (human.username if (human := db.get(User, trigger_message.author_user_id)) else "Vous")
+            if trigger_message.author_user_id
+            else "Vous",
         )
         messages.append(target_envelope)
         config = agent.generation_config or {}
@@ -743,6 +753,7 @@ def execute_room_turn(room_id: UUID, trigger_event_id: UUID) -> dict[str, str]:
             actor_agent_id=context.agent_id,
             idempotency_key=f"agent-reaction:{trigger_event_id}",
         )
+        notify_message(db, room, message)
         total_tokens = result.prompt_tokens + result.completion_tokens
         if provider_kind == ProviderKind.LOCAL:
             room.local_tokens += total_tokens

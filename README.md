@@ -109,3 +109,9 @@ Swagger détaille `GET /resources`, `POST /resources/documents` (multipart `file
 ### Continuité de session
 
 La session web renouvelle son accès une seule fois après un refus 401, avec un secret opaque en cookie HttpOnly. PostgreSQL ne conserve que son condensat ; son expiration absolue est de sept jours et la déconnexion le révoque. Le JWT déjà émis reste valable jusqu’à son expiration normale. Une session définitivement expirée ferme le flux de salle et ouvre la connexion, sans boucle de reconnexion. Les sessions ouvertes avant cette évolution nécessitent une nouvelle connexion.
+
+### Collaborateurs et administration globale
+
+La page **Collaborateurs** crée des invitations par lien, liées à l'adresse du compte et valables sept jours. Leur secret est transmis une seule fois et conservé en condensat. Aucun email n'est envoyé. Les observateurs consultent ; les participants contribuent ; les administrateurs gèrent les accès. Le propriétaire reste protégé et lui seul désigne les administrateurs. Les notifications personnelles de mentions `@identifiant` et de réponses sont persistantes, paginées et ouvrent le message ou son fil.
+
+Le superadmin dispose de `/fr/admin` pour consulter tous les comptes et toutes les salles, avec recherche, pagination et accès aux messages. Les consultations sont auditées. Les autres routes gardent leur isolation par laboratoire et cette interface n'autorise aucune mutation globale. L'inscription ne peut pas attribuer ce privilège. Provisionnement explicite : `python -m api.commands.superadmin`, avec un objet JSON `username`, `email`, `password` sur l'entrée standard ; la commande refuse de modifier un compte existant. Ne conserver aucun mot de passe dans un fichier versionné.

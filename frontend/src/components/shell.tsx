@@ -27,6 +27,7 @@ import {
   LogOut,
 } from 'lucide-react';
 import { useAgora } from './store';
+import { listNotifications } from '@/data/collaboration-api';
 import { usePersistentBoolean } from './persistent-state';
 import { Avatar, Badge, Empty, Modal, Progress } from './ui';
 import { formatMoney, formatTime, t } from '@/i18n';
@@ -38,6 +39,9 @@ const navigation = [
   { key: 'newRoom', path: '/fr/rooms/new', icon: CirclePlus },
   { key: 'rooms', path: '/fr/rooms', icon: Compass },
   { key: 'providers', path: '/fr/providers', icon: Network },
+  { key: 'administration', path: '/fr/admin', icon: Network },
+  { key: 'members', path: '/fr/members', icon: Network },
+  { key: 'notifications', path: '/fr/notifications', icon: Bell },
   { key: 'analytics', path: '/fr/analytics', icon: ChartNoAxesCombined },
 ] as const;
 export function Shell({ children }: { children: ReactNode }) {
@@ -60,6 +64,15 @@ export function Shell({ children }: { children: ReactNode }) {
     [searchOpen, setSearchOpen] = useState(false),
     [query, setQuery] = useState(''),
     [activityOpen, setActivityOpen] = useState(false);
+  const [hasUnread, setHasUnread] = useState(false);
+  useEffect(() => {
+    if (!activeWorkspaceId || !user || mode !== 'api') return;
+    let cancelled = false;
+    const refresh = () => { void listNotifications(activeWorkspaceId).then(page => { if (!cancelled) setHasUnread(page.items.some(n => !n.readAt)); }).catch(() => undefined); };
+    refresh();
+    const interval = window.setInterval(refresh, 30_000);
+    return () => { cancelled = true; window.clearInterval(interval); };
+  }, [activeWorkspaceId, mode, user]);
   const mobileMenu = useRef<HTMLElement>(null);
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
@@ -198,27 +211,30 @@ export function Shell({ children }: { children: ReactNode }) {
         </label>
         <div className="nav-caption">{t.workspaceCaption}</div>
         <nav>
-          {navigation.map(({ key, path, icon: Icon }) => {
-            const href = key === 'live' ? `/fr/rooms/${state.rooms[0]?.id ?? 'ethique-ia'}` : path;
-            const isActive =
-              pathname === path ||
-              (key === 'live' && pathname.startsWith('/fr/rooms/') && !pathname.endsWith('/new'));
-            return (
-              <Link
-                key={key}
-                href={href}
-                title={t.nav[key]}
-                className={`nav-item ${isActive ? 'active' : ''}`}
-                aria-current={isActive ? 'page' : undefined}
-                onClick={() => setMobile(false)}
-              >
-                <Icon size={19} />
-                <span>{t.nav[key]}</span>
-                {key === 'live' && active > 0 && <span className="nav-count">{active}</span>}
-                {key === 'providers' && <span className="nav-dot" />}
-              </Link>
-            );
-          })}
+          {navigation
+            .filter((item) => item.key !== 'administration' || user?.isSuperadmin)
+            .map(({ key, path, icon: Icon }) => {
+              const href =
+                key === 'live' ? `/fr/rooms/${state.rooms[0]?.id ?? 'ethique-ia'}` : path;
+              const isActive =
+                pathname === path ||
+                (key === 'live' && pathname.startsWith('/fr/rooms/') && !pathname.endsWith('/new'));
+              return (
+                <Link
+                  key={key}
+                  href={href}
+                  title={t.nav[key]}
+                  className={`nav-item ${isActive ? 'active' : ''}`}
+                  aria-current={isActive ? 'page' : undefined}
+                  onClick={() => setMobile(false)}
+                >
+                  <Icon size={19} />
+                  <span>{t.nav[key]}</span>
+                  {key === 'live' && active > 0 && <span className="nav-count">{active}</span>}
+                  {key === 'providers' && <span className="nav-dot" />}
+                </Link>
+              );
+            })}
         </nav>
         <div className="sidebar-bottom">
           <div className="budget-mini">
@@ -289,11 +305,11 @@ export function Shell({ children }: { children: ReactNode }) {
             </Link>
             <button
               className="icon-button notification-button"
-              onClick={() => setActivityOpen(true)}
-              aria-label={t.shell.notifications}
+              onClick={() => router.push('/fr/notifications')}
+              aria-label={t.nav.notifications}
             >
               <Bell size={19} />
-              <i />
+              {hasUnread && <i />}
             </button>
             <Link
               className="button primary topbar-create"

@@ -37,6 +37,8 @@ export const messageSchema = z.object({
   id: z.string(),
   roomId: z.string(),
   agentId: z.string().nullable(),
+  authorName: z.string().optional(),
+  isMe: z.boolean().optional(),
   kind: z.enum(['message', 'system']),
   text: z.string(),
   createdAt: z.string(),
@@ -126,6 +128,7 @@ export type AgoraUser = {
   email: string;
   username: string;
   isActive: boolean;
+  isSuperadmin?: boolean;
   createdAt: string;
 };
 
@@ -134,6 +137,6 @@ export type Workspace = {
   name: string;
   slug: string;
   ownerId: string;
-  role: 'owner' | 'editor' | 'viewer' | null;
+  role: 'owner' | 'admin' | 'member' | 'observer' | null;
   createdAt: string;
 };
