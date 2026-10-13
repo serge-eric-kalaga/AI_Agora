@@ -686,6 +686,7 @@ button {
 .profile-avatar {
   width: 31px;
   height: 31px;
+  flex-shrink: 0;
   border-radius: 9px;
   background: #2d2850;
   color: #cdbfff;
@@ -695,6 +696,16 @@ button {
 }
 .profile > div {
   flex: 1;
+  min-width: 0;
+}
+.profile > .icon-button {
+  flex-shrink: 0;
+}
+.profile strong,
+.profile small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .profile strong {
   display: block;
