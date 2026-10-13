@@ -99,10 +99,19 @@ les moins entendus et ceux qui ne viennent pas d’intervenir. Le délai entre d
 tours est réglé par `AUTONOMOUS_TURN_DELAY_SECONDS`. Les appels Ollama et OpenAI
 compatibles sont normalisés, idempotents et soumis aux limites de durée et de coût.
 Les tokens locaux et cloud sont comptabilisés séparément. Un nouveau message humain
-remplace toute ancienne relance planifiée afin de conserver un seul fil actif. Un
-échec final après retries devient un message système et un événement `agent.failed`.
-Un verrou Redis par salle, expirant après `ROOM_TURN_LOCK_SECONDS`, empêche deux
-workers de générer simultanément des réponses concurrentes dans une même conversation.
+remplace les relances encore en attente, mais une réponse déjà en préparation peut
+terminer sur sa cible d’origine. Deux parcours indépendants par fil permettent de
+répondre au même message ou de revenir sur une autre intervention récente. Un agent
+peut aussi lancer une idée, réagir ou se taire. Le choix exclut les questions adressées
+explicitement à un autre agent et les messages auxquels il a déjà répondu.
+Un pointeur Redis par parcours borne les relances ; les événements PostgreSQL servent
+à les reconstruire après une panne. L’idempotence est propre à chaque parcours.
+Les verrous expirants `ROOM_TURN_LOCK_SECONDS` protègent chaque parcours et chaque
+agent : deux agents peuvent préparer leurs réponses ensemble, un même agent garde
+une seule génération à la fois. La publication, le budget et les séquences restent
+sérialisés par verrou de ligne PostgreSQL. La capacité Ollama reste partagée et régulée
+par `LOCAL_PROVIDER_CONCURRENCY` ; deux parcours n’impliquent pas deux générations
+locales simultanées si cette capacité vaut un.
 Docker Compose démarre trois répliques Celery par défaut, configurables avec
 `WORKER_REPLICAS`, afin que plusieurs salles puissent progresser en parallèle.
 Chaque réplique utilise deux processus par défaut, réglables avec

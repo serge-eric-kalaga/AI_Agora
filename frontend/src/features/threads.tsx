@@ -245,7 +245,14 @@ export function ThreadPanel({
                   )
                 }
               >
-                {messages.find((other) => other.id === message.replyTo)?.text.slice(0, 120) ??
+                <strong>
+                  {message.replyAuthorIsMe
+                    ? t.common.you
+                    : (message.replyAuthorName ?? t.chat.quotedMessage)}
+                </strong>
+                {' · '}
+                {message.replyExcerpt ??
+                  messages.find((other) => other.id === message.replyTo)?.text.slice(0, 120) ??
                   root?.text.slice(0, 120)}
               </button>
             )}

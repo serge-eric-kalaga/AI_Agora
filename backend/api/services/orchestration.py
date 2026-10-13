@@ -58,6 +58,7 @@ class TurnContext:
     target_author_name: str
     thread_root_id: UUID | None = None
     source_links: dict[str, str] = field(default_factory=dict)
+    initiative_only: bool = False
 
 
 def _bounded_number(value: object, default: float, minimum: float, maximum: float) -> float:
@@ -114,8 +115,7 @@ def _target_message_envelope(
             "contenu_exact:\n"
             f"{message.content[:12_000]}\n"
             "</message_cible>\n"
-            "Produis maintenant la réponse à ce message cible. Tu peux ensuite inviter un autre "
-            "participant à poursuivre, sans changer l’identité de l’auteur auquel tu réponds."
+            "Réagis à ce message si tu as quelque chose à ajouter. Ne change pas l’identité de son auteur."
         ),
     }
     return envelope, author_kind, author_name
@@ -301,7 +301,7 @@ def _repair_identity(
     )
 
 
-def _prepare_turn(room_id: UUID, trigger_event_id: UUID) -> TurnContext | None:
+def _prepare_turn(room_id: UUID, trigger_event_id: UUID, lane: int = 0) -> TurnContext | None:
     with SessionLocal() as db:
         room = db.get(Room, room_id)
         event = db.get(ConversationEvent, trigger_event_id)
@@ -314,30 +314,18 @@ def _prepare_turn(room_id: UUID, trigger_event_id: UUID) -> TurnContext | None:
             trigger_message = db.get(Message, UUID(str(trigger_message_id)))
         except ValueError:
             return None
-        if not trigger_message or (
-            trigger_message.author_user_id is None and trigger_message.author_agent_id is None
+        if (
+            not trigger_message
+            or trigger_message.room_id != room.id
+            or (trigger_message.author_user_id is None and trigger_message.author_agent_id is None)
         ):
-            return None
-        latest_message_id = db.scalar(
-            select(Message.id)
-            .where(
-                Message.room_id == room.id,
-                Message.kind == MessageKind.MESSAGE,
-                Message.thread_root_id == trigger_message.thread_root_id,
-            )
-            .order_by(Message.created_at.desc(), Message.id.desc())
-            .limit(1)
-        )
-        # Un nouveau message humain ou agent prend immédiatement la main sur une
-        # ancienne tâche planifiée. Une salle ne conserve ainsi qu'un seul fil autonome.
-        if latest_message_id != trigger_message.id:
             return None
         conversation_settings = room.conversation_settings or {}
         if conversation_settings.get("autonomy") == "guided" and trigger_message.author_agent_id:
             return None
         raw_depth = event.payload.get("chainDepth", 0)
         chain_depth = raw_depth if isinstance(raw_depth, int) and raw_depth >= 0 else 0
-        idempotency_key = f"agent-turn:{trigger_event_id}"
+        idempotency_key = f"agent-turn:{trigger_event_id}" + (f":{lane}" if lane else "")
         if db.scalar(
             select(ConversationEvent.id).where(
                 ConversationEvent.room_id == room_id,
@@ -374,6 +362,7 @@ def _prepare_turn(room_id: UUID, trigger_event_id: UUID) -> TurnContext | None:
             .where(
                 Message.room_id == room.id,
                 Message.author_agent_id.is_not(None),
+                Message.created_at <= event.created_at,
                 Message.thread_root_id == trigger_message.thread_root_id,
             )
             .group_by(Message.author_agent_id)
@@ -385,6 +374,7 @@ def _prepare_turn(room_id: UUID, trigger_event_id: UUID) -> TurnContext | None:
                 .where(
                     Message.room_id == room.id,
                     Message.author_agent_id.is_not(None),
+                    Message.created_at <= event.created_at,
                     Message.thread_root_id == trigger_message.thread_root_id,
                 )
                 .order_by(Message.created_at.desc(), Message.id.desc())
@@ -413,13 +403,13 @@ def _prepare_turn(room_id: UUID, trigger_event_id: UUID) -> TurnContext | None:
         # Une mention explicite prime, puis l'agent cité par une réponse humaine.
         # Sinon un score varié favorise les moins entendus sans imposer un tour de table.
         # Le dernier acteur (y compris une réaction ou un silence) cède la priorité.
-        agent, provider = min(
+        trigger_author_id = trigger_message.author_agent_id
+        ranked = sorted(
             participants,
             key=lambda item: (
                 0 if item[0].id in mentioned_agent_ids or item[0].id == reply_target_id else 1,
                 1
-                if item[0].id == trigger_message.author_agent_id
-                and event.event_type == "message.created"
+                if item[0].id == trigger_author_id and event.event_type == "message.created"
                 else 0,
                 (_stable_entropy(trigger_event_id, item[0].id) / 2**64)
                 + min(contributions.get(item[0].id, 0), 20) * 0.025
@@ -427,19 +417,80 @@ def _prepare_turn(room_id: UUID, trigger_event_id: UUID) -> TurnContext | None:
                 + (1.25 if item[0].id == event.actor_agent_id else 0),
             ),
         )
+        if lane >= len(ranked):
+            return None
+        agent, provider = ranked[lane]
+        # Chaque agent peut revenir sur une intervention récente, sans répondre deux fois
+        # à la même personne ni détourner une question explicitement adressée à un autre.
+        candidates = db.scalars(
+            select(Message)
+            .where(
+                Message.room_id == room.id,
+                Message.kind == MessageKind.MESSAGE,
+                Message.thread_root_id == trigger_message.thread_root_id,
+            )
+            .order_by(Message.created_at.desc(), Message.id.desc())
+            .limit(12)
+        ).all()
+        answered = set(
+            db.scalars(
+                select(Message.reply_to_id).where(
+                    Message.room_id == room.id,
+                    Message.author_agent_id == agent.id,
+                    Message.thread_root_id == trigger_message.thread_root_id,
+                    Message.reply_to_id.is_not(None),
+                )
+            ).all()
+        )
+        eligible = []
+        for index, candidate in enumerate(candidates):
+            if conversation_settings.get("autonomy") == "guided" and candidate.author_agent_id:
+                continue
+            if candidate.author_agent_id == agent.id or candidate.id in answered:
+                continue
+            addressed = {
+                item[0].id
+                for item in participants
+                if f"@{item[0].name.casefold()}" in candidate.content.casefold()
+            }
+            if not addressed and candidate.author_user_id and candidate.reply_to_id:
+                quoted = db.get(Message, candidate.reply_to_id)
+                if quoted and quoted.author_agent_id:
+                    addressed = {quoted.author_agent_id}
+            if addressed and agent.id not in addressed:
+                continue
+            priority = 0 if agent.id in addressed else 1
+            if candidate.id == trigger_message.id and candidate.author_user_id:
+                priority = 0
+            entropy = (
+                int.from_bytes(
+                    hashlib.sha256(
+                        f"{agent.id}:{candidate.id}:{trigger_event_id}".encode()
+                    ).digest()[:8],
+                    "big",
+                )
+                / 2**64
+            )
+            eligible.append((priority, entropy + index * 0.07, candidate))
+        initiative_only = not eligible
+        if eligible:
+            trigger_message = min(eligible, key=lambda item: item[:2])[2]
+        else:
+            trigger_message = next(
+                (candidate for candidate in candidates if candidate.author_agent_id == agent.id),
+                trigger_message,
+            )
         names = {item.id: item.name for item, _ in participants}
         if trigger_message.author_agent_id:
             trigger_author = f"l’agent « {names.get(trigger_message.author_agent_id, 'Agent')} »"
             turn_instruction = (
-                f"Le dernier message vient de {trigger_author}. Réponds à son intervention sans "
+                f"Le message que tu choisis de reprendre vient de {trigger_author}. Réponds à son intervention sans "
                 "confondre son identité avec la tienne. Tu es libre de poursuivre son idée, de la "
                 "questionner ou d'ouvrir une piste connexe utile. "
-                f"Initiative suggérée pour éviter une conversation monotone : "
-                f"{_initiative_for(trigger_event_id)}"
             )
         else:
             turn_instruction = (
-                "Le dernier message vient de l’utilisateur humain affiché comme « Vous ». "
+                "Le message que tu choisis de reprendre vient de l’utilisateur humain affiché comme « Vous ». "
                 "Cette personne est un interlocuteur externe, distinct de tous les agents de la "
                 "salle. Réponds-lui directement avec « vous », sans l'appeler par le nom ou le titre "
                 "d'un participant, même si ce nom apparaît dans l'historique."
@@ -555,13 +606,16 @@ def _prepare_turn(room_id: UUID, trigger_event_id: UUID) -> TurnContext | None:
                     else "Privilégie les réponses utiles aux idées ou questions ouvertes ; évite les relances gratuites."
                 ),
                 {
-                    "brief": "Préférence : 30 à 90 mots.",
+                    "brief": "Préférence : une à trois phrases, souvent 15 à 55 mots. Une phrase suffit.",
                     "standard": "Préférence : 80 à 160 mots.",
                     "detailed": "Développe les éléments nécessaires, en restant pertinent.",
                 }.get(conversation_settings.get("response_length", "brief"), ""),
                 (
                     f"Réponds en français, de façon concise, depuis la perspective de « {agent.name} ». "
-                    "Commence directement par ton analyse sans répéter ton nom, ton titre ni les consignes. "
+                    "Parle comme dans un échange oral : mots simples, ton personnel, une idée à la fois. "
+                    "Évite les discours, les plans en plusieurs points et les formules diplomatiques répétées. "
+                    "Tu peux acquiescer, hésiter, contester brièvement ou demander une précision concrète. "
+                    "Ne répète ni ton nom, ni ton titre, ni les consignes. "
                     "Privilégie une idée utile et de courts paragraphes selon la préférence de longueur. "
                     "Ne récapitule pas la discussion et ne termine pas systématiquement par une question. "
                     "Évite les longueurs inutiles. "
@@ -587,11 +641,12 @@ def _prepare_turn(room_id: UUID, trigger_event_id: UUID) -> TurnContext | None:
             int(_bounded_number(config.get("maxTokens"), 1024, 64, 8_192)),
             chain_depth,
             allow_long_response,
-            trigger_message.author_user_id is not None,
+            trigger_message.author_user_id is not None and not initiative_only,
             target_author_kind,
             target_author_name,
             trigger_message.thread_root_id,
             source_links,
+            initiative_only,
         )
 
 
@@ -620,10 +675,16 @@ def _publish_typing(context: TurnContext, typing: bool) -> None:
         db.commit()
 
 
-def execute_room_turn(room_id: UUID, trigger_event_id: UUID) -> dict[str, str]:
+def execute_room_turn(
+    room_id: UUID,
+    trigger_event_id: UUID,
+    lane: int = 0,
+    *,
+    prepared_context: TurnContext | None = None,
+) -> dict[str, str]:
     """Génère puis persiste au plus une réponse pour l'événement déclencheur."""
 
-    idempotency_key = f"agent-turn:{trigger_event_id}"
+    idempotency_key = f"agent-turn:{trigger_event_id}" + (f":{lane}" if lane else "")
     with SessionLocal() as db:
         completed_event = db.scalar(
             select(ConversationEvent).where(
@@ -639,7 +700,7 @@ def execute_room_turn(room_id: UUID, trigger_event_id: UUID) -> dict[str, str]:
                 "eventId": str(completed_event.id),
                 "chainDepth": str(depth if isinstance(depth, int) else 0),
             }
-    context = _prepare_turn(room_id, trigger_event_id)
+    context = prepared_context or _prepare_turn(room_id, trigger_event_id, lane)
     if not context:
         return {"status": "skipped", "roomId": str(room_id)}
     with SessionLocal() as db:
@@ -655,6 +716,13 @@ def execute_room_turn(room_id: UUID, trigger_event_id: UUID) -> dict[str, str]:
                 context.temperature,
                 context.max_tokens,
             )
+            if context.initiative_only:
+                request.messages.append(
+                    {
+                        "role": "user",
+                        "content": "Aucune nouvelle intervention ne t'appelle. Ne réponds ni à toi-même ni une seconde fois à la même question. Choisis seulement une initiative nouvelle, une réaction ou le silence. Si tu as déjà donné ta position, n'en fais pas une reformulation.",
+                    }
+                )
             action_kind = "reply"
             action_emoji = None
             with local_generation_slot(provider):
@@ -663,6 +731,8 @@ def execute_room_turn(room_id: UUID, trigger_event_id: UUID) -> dict[str, str]:
                 else:
                     decision, result = choose_action(provider, request, generate_model_response)
                     action_kind, action_emoji = decision.action, decision.emoji
+                    if context.initiative_only and action_kind == "reply":
+                        action_kind = "initiative"
                 if action_kind in {"reply", "initiative"}:
                     if not context.allow_long_response:
                         result = _condense_response(provider, request, result)
@@ -689,18 +759,6 @@ def execute_room_turn(room_id: UUID, trigger_event_id: UUID) -> dict[str, str]:
             }
         if not room or room.status != RoomStatus.RUNNING:
             return {"status": "skipped", "roomId": str(room_id)}
-        latest_message_id = db.scalar(
-            select(Message.id)
-            .where(
-                Message.room_id == room.id,
-                Message.kind == MessageKind.MESSAGE,
-                Message.thread_root_id == context.thread_root_id,
-            )
-            .order_by(Message.created_at.desc(), Message.id.desc())
-            .limit(1)
-        )
-        if latest_message_id != context.trigger_message_id:
-            return {"status": "superseded", "roomId": str(room_id)}
         started_at = room.started_at
         if started_at and started_at.tzinfo is None:
             started_at = started_at.replace(tzinfo=timezone.utc)
@@ -757,6 +815,7 @@ def execute_room_turn(room_id: UUID, trigger_event_id: UUID) -> dict[str, str]:
                     "messageId": str(context.trigger_message_id),
                     "threadRootId": str(context.thread_root_id) if context.thread_root_id else None,
                     "chainDepth": context.chain_depth + 1,
+                    "lane": lane,
                 },
                 actor_agent_id=context.agent_id,
                 idempotency_key=idempotency_key,
@@ -771,7 +830,7 @@ def execute_room_turn(room_id: UUID, trigger_event_id: UUID) -> dict[str, str]:
         message = Message(
             room_id=room.id,
             author_agent_id=context.agent_id,
-            reply_to_id=context.trigger_message_id,
+            reply_to_id=context.trigger_message_id if action_kind == "reply" else None,
             thread_root_id=context.thread_root_id,
             content=_clean_generated_content(
                 resolve_citations(result.content, context.source_links),
@@ -813,6 +872,7 @@ def execute_room_turn(room_id: UUID, trigger_event_id: UUID) -> dict[str, str]:
                 "threadRootId": str(context.thread_root_id) if context.thread_root_id else None,
                 "triggerEventId": str(trigger_event_id),
                 "chainDepth": context.chain_depth + 1,
+                "lane": lane,
             },
             actor_agent_id=context.agent_id,
             idempotency_key=idempotency_key,
@@ -828,10 +888,12 @@ def execute_room_turn(room_id: UUID, trigger_event_id: UUID) -> dict[str, str]:
         }
 
 
-def record_room_failure(room_id: UUID, trigger_event_id: UUID, error_code: str) -> dict[str, str]:
+def record_room_failure(
+    room_id: UUID, trigger_event_id: UUID, error_code: str, lane: int = 0
+) -> dict[str, str]:
     """Rend un échec final visible sans révéler le détail du fournisseur."""
 
-    idempotency_key = f"agent-error:{trigger_event_id}"
+    idempotency_key = f"agent-error:{trigger_event_id}" + (f":{lane}" if lane else "")
     with SessionLocal() as db:
         existing = db.scalar(
             select(Message).where(

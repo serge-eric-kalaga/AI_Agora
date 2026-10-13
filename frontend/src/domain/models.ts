@@ -57,6 +57,9 @@ export const messageSchema = z.object({
     )
     .optional(),
   replyTo: z.string().optional(),
+  replyAuthorName: z.string().optional(),
+  replyAuthorIsMe: z.boolean().optional(),
+  replyExcerpt: z.string().optional(),
   threadRootId: z.string().optional(),
 });
 export const conversationSettingsSchema = z.object({

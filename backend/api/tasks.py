@@ -9,7 +9,7 @@ from uuid import UUID
 from celery.exceptions import OperationalError
 from redis import Redis
 from redis.exceptions import RedisError
-from sqlalchemy import func, select
+from sqlalchemy import case, func, select
 
 from api.celery_app import celery_app
 from api.configs import get_settings
@@ -18,7 +18,7 @@ from api.database.models import ConversationEvent, Room, RoomStatus
 from api.services.conversation_memory import refresh_memory
 from api.services.generation_capacity import LocalProviderBusy, renewed_lease
 from api.services.model_clients import ModelProviderError
-from api.services.orchestration import execute_room_turn, record_room_failure
+from api.services.orchestration import _prepare_turn, execute_room_turn, record_room_failure
 
 logger = logging.getLogger(__name__)
 SCHEDULE_MARKER_TTL_SECONDS = 7 * 24 * 60 * 60
@@ -28,13 +28,13 @@ class RoomTurnBusy(RuntimeError):
     """Indique qu'un autre worker orchestre déjà cette salle."""
 
 
-def _execute_with_room_lock(room_id: UUID, event_id: UUID) -> dict[str, str]:
-    """Sérialise les générations d'une salle avec un verrou Redis expirant."""
+def _execute_with_room_lock(room_id: UUID, event_id: UUID, lane: int = 0) -> dict[str, str]:
+    """Autorise deux parcours indépendants, mais un seul travail par agent à la fois."""
 
     settings = get_settings()
     client = Redis.from_url(settings.redis_url)
     lock = client.lock(
-        f"ai-agora:room:{room_id}:turn",
+        f"ai-agora:room:{room_id}:lane:{lane}:turn",
         timeout=settings.room_turn_lock_seconds,
         thread_local=False,
     )
@@ -44,32 +44,83 @@ def _execute_with_room_lock(room_id: UUID, event_id: UUID) -> dict[str, str]:
         raise RoomTurnBusy
     try:
         with renewed_lease(lock, settings.room_turn_lock_seconds):
-            return execute_room_turn(room_id, event_id)
+            context = _prepare_turn(room_id, event_id, lane)
+            if context is None:
+                return (
+                    execute_room_turn(room_id, event_id, lane)
+                    if lane
+                    else execute_room_turn(room_id, event_id)
+                )
+            agent_lock = client.lock(
+                f"ai-agora:room:{room_id}:agent:{context.agent_id}:turn",
+                timeout=settings.room_turn_lock_seconds,
+                thread_local=False,
+            )
+            if not agent_lock.acquire(blocking=False):
+                raise RoomTurnBusy
+            with renewed_lease(agent_lock, settings.room_turn_lock_seconds):
+                return execute_room_turn(room_id, event_id, lane, prepared_context=context)
     finally:
         client.close()
 
 
 def schedule_room_turn(
-    room_id: str, trigger_event_id: str, *, countdown: int = 0, force: bool = False
+    room_id: str,
+    trigger_event_id: str,
+    *,
+    countdown: int = 0,
+    force: bool = False,
+    lane: int | None = None,
+    parent_event_id: str | None = None,
 ) -> bool:
-    """Planifie un seul tour par événement, même en cas de retry ou de double clic."""
+    """Deux parcours bornés ; une relance humaine remplace les tâches encore en attente.
 
+    Le pointeur Redis empêche une ancienne réponse de relancer un troisième parcours.
+    Les événements PostgreSQL permettent de reconstruire chaque parcours après une panne.
+    """
+    if lane is None:
+        return any(
+            [
+                schedule_room_turn(
+                    room_id,
+                    trigger_event_id,
+                    countdown=countdown + slot * 2,
+                    force=force,
+                    lane=slot,
+                )
+                for slot in range(2)
+            ]
+        )
     settings = get_settings()
+    with SessionLocal() as db:
+        event = db.get(ConversationEvent, UUID(trigger_event_id))
+        thread = event.payload.get("threadRootId") if event else None
     client = Redis.from_url(settings.redis_url)
-    marker = f"ai-agora:room:{room_id}:scheduled:{trigger_event_id}"
+    marker = f"ai-agora:room:{room_id}:scheduled:{trigger_event_id}:{lane}"
+    pointer = f"ai-agora:room:{room_id}:thread:{thread or 'main'}:lane:{lane}:cursor"
     try:
-        if force:
-            client.set(marker, str(time.time()), ex=SCHEDULE_MARKER_TTL_SECONDS)
-            claimed = True
-        else:
-            claimed = bool(
-                client.set(marker, str(time.time()), nx=True, ex=SCHEDULE_MARKER_TTL_SECONDS)
-            )
+        claimed = client.eval(
+            """
+            if ARGV[4] ~= '' and redis.call('GET', KEYS[2]) ~= ARGV[4] then return 0 end
+            if ARGV[5] ~= '1' and redis.call('EXISTS', KEYS[1]) == 1 then return 0 end
+            redis.call('SET', KEYS[1], ARGV[1], 'EX', ARGV[3])
+            redis.call('SET', KEYS[2], ARGV[2], 'EX', ARGV[3])
+            return 1
+        """,
+            2,
+            marker,
+            pointer,
+            str(time.time()),
+            trigger_event_id,
+            str(SCHEDULE_MARKER_TTL_SECONDS),
+            parent_event_id or "",
+            "1" if force else "0",
+        )
         if not claimed:
             return False
         try:
             continue_room_turn.apply_async(
-                args=[room_id, trigger_event_id], countdown=max(0, countdown)
+                args=[room_id, trigger_event_id, lane], countdown=max(0, countdown)
             )
         except (OperationalError, RedisError):
             client.delete(marker)
@@ -83,20 +134,41 @@ def schedule_room_turn(
     bind=True,
     max_retries=None,
 )
-def continue_room_turn(self, room_id: str, trigger_event_id: str) -> dict[str, str]:  # type: ignore[no-untyped-def]
+def continue_room_turn(self, room_id: str, trigger_event_id: str, lane: int = 0) -> dict[str, str]:  # type: ignore[no-untyped-def]
     """Laisse les participants échanger tant que la salle reste active."""
 
     room_uuid = UUID(room_id)
     event_uuid = UUID(trigger_event_id)
     try:
-        result = _execute_with_room_lock(room_uuid, event_uuid)
+        with SessionLocal() as db:
+            event = db.get(ConversationEvent, event_uuid)
+            thread = event.payload.get("threadRootId") if event else None
+        if event:
+            client = Redis.from_url(get_settings().redis_url)
+            try:
+                pointer = cast(
+                    bytes | str | None,
+                    client.get(
+                        f"ai-agora:room:{room_id}:thread:{thread or 'main'}:lane:{lane}:cursor"
+                    ),
+                )
+                cursor = pointer.decode() if isinstance(pointer, bytes) else pointer
+                if cursor and cursor != trigger_event_id:
+                    return {"status": "superseded", "roomId": room_id}
+            finally:
+                client.close()
+        result = (
+            _execute_with_room_lock(room_uuid, event_uuid, lane)
+            if lane
+            else _execute_with_room_lock(room_uuid, event_uuid)
+        )
     except (RoomTurnBusy, LocalProviderBusy) as exc:
         # La saturation est une attente normale, pas un message d'erreur dans la salle.
         raise self.retry(exc=exc, countdown=10, max_retries=None) from exc
     except ModelProviderError as exc:
         if exc.retryable and self.request.retries < 3:
             raise self.retry(exc=exc, countdown=2 ** (self.request.retries + 1)) from exc
-        return record_room_failure(room_uuid, event_uuid, exc.code)
+        return record_room_failure(room_uuid, event_uuid, exc.code, lane)
     if result.get("status") == "completed" and int(result.get("chainDepth", "0")) % 8 == 0:
         refresh_room_memory.delay(room_id)
     if result.get("status") in {"completed", "already_completed"}:
@@ -107,6 +179,8 @@ def continue_room_turn(self, room_id: str, trigger_event_id: str) -> dict[str, s
                     room_id,
                     next_event_id,
                     countdown=conversation_delay(room_uuid),
+                    lane=lane,
+                    parent_event_id=trigger_event_id,
                 )
             except (OperationalError, RedisError) as exc:
                 raise self.retry(exc=exc, countdown=2 ** (self.request.retries + 1)) from exc
@@ -147,7 +221,15 @@ def recover_active_rooms() -> dict[str, int]:
                             ConversationEvent.room_id == room.id,
                             ConversationEvent.event_type.in_(["message.created", "agent.acted"]),
                         )
-                        .group_by(ConversationEvent.payload["threadRootId"].as_string())
+                        .group_by(
+                            ConversationEvent.payload["threadRootId"].as_string(),
+                            case(
+                                (ConversationEvent.actor_agent_id.is_(None), -1),
+                                else_=func.coalesce(
+                                    ConversationEvent.payload["lane"].as_integer(), 0
+                                ),
+                            ),
+                        )
                     )
                     events = db.scalars(
                         select(ConversationEvent).where(
@@ -155,9 +237,33 @@ def recover_active_rooms() -> dict[str, int]:
                             ConversationEvent.sequence.in_(latest_sequences),
                         )
                     ).all()
-                    # Chaque fil conserve sa propre reprise ; un message principal
-                    # ne doit pas supprimer l'initiative d'une discussion parallèle.
-                    for event in events:
+                    # Pour chaque parcours, retenir le plus récent entre son événement
+                    # et la dernière intervention humaine du même fil.
+                    groups: dict[str, dict[int, ConversationEvent]] = {}
+                    for candidate in events:
+                        thread = str(candidate.payload.get("threadRootId") or "main")
+                        slot = (
+                            int(candidate.payload.get("lane", 0))
+                            if candidate.actor_agent_id
+                            else -1
+                        )
+                        groups.setdefault(thread, {})[slot] = candidate
+                    plans: list[tuple[ConversationEvent, int | None]] = []
+                    for group in groups.values():
+                        root = group.get(-1)
+                        chosen = [
+                            max([e for e in (root, group.get(slot)) if e], key=lambda e: e.sequence)
+                            if root or group.get(slot)
+                            else None
+                            for slot in range(2)
+                        ]
+                        if chosen[0] is not None and chosen[0] == chosen[1]:
+                            plans.append((chosen[0], None))
+                        else:
+                            plans.extend(
+                                (event, slot) for slot, event in enumerate(chosen) if event
+                            )
+                    for event, lane in plans:
                         if not event:
                             continue
                         if (room.conversation_settings or {}).get(
@@ -166,7 +272,9 @@ def recover_active_rooms() -> dict[str, int]:
                             continue
                         marker = cast(
                             bytes | str | None,
-                            client.get(f"ai-agora:room:{room.id}:scheduled:{event.id}"),
+                            client.get(
+                                f"ai-agora:room:{room.id}:scheduled:{event.id}:{lane if lane is not None else 0}"
+                            ),
                         )
                         try:
                             age = time.time() - float(marker) if marker else float("inf")
@@ -174,7 +282,12 @@ def recover_active_rooms() -> dict[str, int]:
                             age = float("inf")  # Compatibilité avec l'ancien marqueur « 1 ».
                         if age < settings.room_recovery_stale_seconds:
                             continue
-                        if schedule_room_turn(str(room.id), str(event.id), force=True):
+                        if schedule_room_turn(
+                            str(room.id),
+                            str(event.id),
+                            force=True,
+                            lane=lane,
+                        ):
                             scheduled += 1
         finally:
             lock.release()

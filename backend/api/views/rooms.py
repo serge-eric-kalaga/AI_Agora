@@ -179,6 +179,18 @@ def _message_read(db: DbSession, message: Message, user_id: UUID) -> MessageRead
                 )
         return actors
 
+    quoted = db.get(Message, message.reply_to_id) if message.reply_to_id else None
+    # L’auteur cité reste disponible même si le message est hors de la page chargée.
+    quoted_author = None
+    if quoted and quoted.room_id == message.room_id:
+        if quoted.author_agent_id:
+            quoted_agent = db.get(AgentDefinition, quoted.author_agent_id)
+            quoted_author = quoted_agent.name if quoted_agent else "Agent"
+        elif quoted.author_user_id:
+            quoted_user = db.get(User, quoted.author_user_id)
+            quoted_author = quoted_user.username if quoted_user else "Membre"
+    else:
+        quoted = None
     return MessageRead(
         id=message.id,
         room_id=message.room_id,
@@ -198,6 +210,9 @@ def _message_read(db: DbSession, message: Message, user_id: UUID) -> MessageRead
         if message.author_agent_id
         else None,
         reply_to_id=message.reply_to_id,
+        reply_author_name=quoted_author,
+        reply_author_is_me=bool(quoted and quoted.author_user_id == user_id),
+        reply_excerpt=quoted.content[:160] if quoted else None,
         thread_root_id=message.thread_root_id,
         kind=message.kind,
         content=message.content,

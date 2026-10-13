@@ -156,6 +156,9 @@ class MessageRead(APIModel):
     author_agent_id: UUID | None
     author_agent_name: str | None = None
     reply_to_id: UUID | None
+    reply_author_name: str | None = None
+    reply_author_is_me: bool = False
+    reply_excerpt: str | None = None
     thread_root_id: UUID | None = None
     kind: MessageKind
     content: str

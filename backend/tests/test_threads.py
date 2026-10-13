@@ -150,5 +150,5 @@ def test_thread_isolation_attribution_and_generation(client, account, monkeypatc
     )
     from api.tasks import recover_active_rooms
 
-    assert recover_active_rooms.run() == {"scheduled": 2}
-    assert len(set(scheduled)) == 2
+    assert recover_active_rooms.run() == {"scheduled": 3}
+    assert len(set(scheduled)) == 3

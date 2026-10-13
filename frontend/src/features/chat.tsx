@@ -721,7 +721,22 @@ function ChatRoom({ room }: { room: Room }) {
                       onClick={() => void jumpToMessage(message.replyTo!)}
                     >
                       <Reply size={12} />
-                      <span>{reply?.text.slice(0, 160) ?? t.chat.quotedMessage}</span>
+                      <span>
+                        <strong>
+                          {message.replyAuthorIsMe
+                            ? t.common.you
+                            : (message.replyAuthorName ??
+                              (reply?.agentId
+                                ? state.agents.find((agent) => agent.id === reply.agentId)?.name
+                                : reply?.isMe === false
+                                  ? reply.authorName
+                                  : reply
+                                    ? t.common.you
+                                    : t.chat.quotedMessage))}
+                        </strong>
+                        {' · '}
+                        {message.replyExcerpt ?? reply?.text.slice(0, 160) ?? t.chat.quotedMessage}
+                      </span>
                     </button>
                   )}
                   <div className="message-text">
@@ -833,7 +848,8 @@ function ChatRoom({ room }: { room: Room }) {
               <span>
                 <strong>
                   {t.chat.replyTo}{' '}
-                  {state.agents.find((a) => a.id === replyTo.agentId)?.name ?? t.common.you}
+                  {state.agents.find((a) => a.id === replyTo.agentId)?.name ??
+                    (replyTo.isMe === false ? (replyTo.authorName ?? t.common.you) : t.common.you)}
                 </strong>
                 <small>{replyTo.text.slice(0, 140)}</small>
               </span>

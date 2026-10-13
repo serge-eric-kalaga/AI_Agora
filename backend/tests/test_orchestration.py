@@ -138,12 +138,18 @@ def test_local_turn_is_idempotent_and_accounts_for_tokens(
     assert all(message["role"] == "user" for message in requests[0].messages)
     assert "type_auteur=humain" in requests[0].messages[-1]["content"]
     assert "auteur_affiche=architecte" in requests[0].messages[-1]["content"]
-    assert "dernier message vient de l’utilisateur humain" in requests[0].system_prompt
+    assert (
+        "message que tu choisis de reprendre vient de l’utilisateur humain"
+        in requests[0].system_prompt
+    )
     assert requests[1].messages[-3]["role"] == "user"
     assert '"auteur": "architecte"' in requests[1].messages[-3]["content"]
     assert "type_auteur=agent" in requests[1].messages[-2]["content"]
     assert "auteur_affiche=Mini B" in requests[1].messages[-2]["content"]
-    assert "dernier message vient de l’agent « Mini B »" in requests[1].system_prompt
+    assert (
+        "message que tu choisis de reprendre vient de l’agent « Mini B »"
+        in requests[1].system_prompt
+    )
     with SessionLocal() as db:
         stored_room = db.get(Room, UUID(room["id"]))
         agent_messages = db.scalar(
@@ -471,7 +477,7 @@ def test_autonomous_chain_continues_beyond_previous_limit(monkeypatch) -> None:
     )
     monkeypatch.setattr(
         "api.tasks.schedule_room_turn",
-        lambda current_room_id, event_id, *, countdown=0, force=False: (
+        lambda current_room_id, event_id, *, countdown=0, force=False, **kwargs: (
             scheduled.append((current_room_id, event_id, countdown)) or True
         ),
     )
@@ -488,12 +494,17 @@ def test_schedule_room_turn_deduplicates_same_event(monkeypatch) -> None:
     markers: set[str] = set()
     scheduled: list[tuple[list[str], int]] = []
 
+    pointers: dict[str, str] = {}
+
     class FakeRedis:
-        def set(self, key: str, _value: str, *, nx: bool = False, ex: int) -> bool:
-            if nx and key in markers:
-                return False
-            markers.add(key)
-            return True
+        def eval(self, script, key_count, marker, pointer, timestamp, event, ttl, parent, force):
+            if parent and pointers.get(pointer) != parent:
+                return 0
+            if force != "1" and marker in markers:
+                return 0
+            markers.add(marker)
+            pointers[pointer] = event
+            return 1
 
         def delete(self, key: str) -> None:
             markers.discard(key)
@@ -512,7 +523,9 @@ def test_schedule_room_turn_deduplicates_same_event(monkeypatch) -> None:
 
     assert schedule_room_turn(room_id, event_id, countdown=3) is True
     assert schedule_room_turn(room_id, event_id, countdown=3) is False
-    assert scheduled == [([room_id, event_id], 3)]
+    assert scheduled == [([room_id, event_id, 0], 3), ([room_id, event_id, 1], 5)]
+    # Une réponse ancienne ne peut pas créer une troisième boucle après un message humain.
+    assert schedule_room_turn(room_id, str(uuid4()), lane=0, parent_event_id=str(uuid4())) is False
 
 
 def test_provider_diagnostic_refreshes_discovered_models(

@@ -122,5 +122,7 @@ def test_recovery_respects_room_state_and_pending_work(account, monkeypatch, cas
         lambda room, event, **kwargs: scheduled.append((room, event, kwargs)) or True,
     )
     assert recover_active_rooms.run() == {"scheduled": expected}
-    assert scheduled == ([(str(room_id), str(event_id), {"force": True})] if expected else [])
+    assert scheduled == (
+        [(str(room_id), str(event_id), {"force": True, "lane": None})] if expected else []
+    )
     assert held == set()

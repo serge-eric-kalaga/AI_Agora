@@ -92,6 +92,9 @@ const messageReadSchema = z.object({
   authorUserName: z.string().nullable().optional(),
   isMe: z.boolean().optional(),
   replyToId: z.string().nullable(),
+  replyAuthorName: z.string().nullable().optional(),
+  replyAuthorIsMe: z.boolean().optional(),
+  replyExcerpt: z.string().nullable().optional(),
   threadRootId: z.string().nullable().optional(),
   kind: z.enum(['message', 'system']),
   content: z.string(),
@@ -298,6 +301,9 @@ function mapMessage(value: z.infer<typeof messageReadSchema>): Message {
     reactions,
     reactionActors,
     ...(value.replyToId ? { replyTo: value.replyToId } : {}),
+    ...(value.replyAuthorName ? { replyAuthorName: value.replyAuthorName } : {}),
+    replyAuthorIsMe: value.replyAuthorIsMe,
+    ...(value.replyExcerpt ? { replyExcerpt: value.replyExcerpt } : {}),
     ...(value.threadRootId ? { threadRootId: value.threadRootId } : {}),
   };
 }

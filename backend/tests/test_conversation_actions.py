@@ -137,3 +137,73 @@ def test_invalid_action_is_not_a_partial_message(monkeypatch):
             ModelRequest("mini", "Identité", []),
             lambda *_: ModelResult('{"action":', 10, 4, True),
         )
+
+
+def test_independent_replies_keep_their_target_and_quoted_author(client, account, monkeypatch):
+    """Deux agents répondent au même humain même si une autre réponse arrive entretemps."""
+    with SessionLocal() as db:
+        user = db.scalar(select(User))
+        provider = ProviderConnection(
+            workspace_id=user.memberships[0].workspace_id, name="Local", kind=ProviderKind.LOCAL
+        )
+        db.add(provider)
+        db.flush()
+        room = Room(
+            workspace_id=provider.workspace_id,
+            created_by_id=user.id,
+            name="Libre",
+            topic="Organiser une sortie",
+            status=RoomStatus.RUNNING,
+            budget_limit=5,
+            max_duration_minutes=60,
+        )
+        db.add(room)
+        db.flush()
+        for name in ("Alice", "Benoît"):
+            agent = AgentDefinition(
+                workspace_id=provider.workspace_id,
+                provider_id=provider.id,
+                name=name,
+                role="Participant",
+                model="mini",
+                system_prompt=f"Tu es {name}.",
+            )
+            db.add(agent)
+            db.flush()
+            db.add(RoomParticipant(room_id=room.id, agent_id=agent.id))
+        root = Message(
+            room_id=room.id,
+            author_user_id=user.id,
+            content="Qui vient dimanche ?",
+            idempotency_key="question-commune",
+        )
+        db.add(root)
+        db.flush()
+        event = append_room_event(
+            db, room.id, "message.created", {"messageId": str(root.id)}, actor_user_id=user.id
+        )
+        db.commit()
+        rid, eid, mid, wid = room.id, event.id, root.id, room.workspace_id
+    first, second = _prepare_turn(rid, eid, 0), _prepare_turn(rid, eid, 1)
+    assert first.agent_id != second.agent_id
+    assert first.trigger_message_id == second.trigger_message_id == mid
+    monkeypatch.setattr("api.services.orchestration.local_generation_slot", lambda _: nullcontext())
+    monkeypatch.setattr(
+        "api.services.orchestration.generate_model_response",
+        lambda *_: ModelResult("Oui, je viens.", 12, 5),
+    )
+    assert execute_room_turn(rid, eid, 0, prepared_context=first)["status"] == "completed"
+    retried_second = _prepare_turn(rid, eid, 1)
+    assert retried_second.agent_id == second.agent_id
+    assert retried_second.trigger_message_id == mid
+    assert execute_room_turn(rid, eid, 1, prepared_context=retried_second)["status"] == "completed"
+    assert execute_room_turn(rid, eid, 1)["status"] == "already_completed"
+    page = client.get(
+        f"/api/v1/workspaces/{wid}/rooms/{rid}/messages?limit=1", headers=account["headers"]
+    ).json()
+    # Le message cité n’est pas dans cette page mais son auteur et son texte sont visibles.
+    quoted = page["items"][0]
+    assert quoted["replyToId"] == str(mid)
+    assert quoted["replyAuthorName"] == account["user"]["username"]
+    assert quoted["replyAuthorIsMe"] is True
+    assert quoted["replyExcerpt"] == "Qui vient dimanche ?"
