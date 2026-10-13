@@ -5,6 +5,7 @@ import Markdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import {
   Plus,
+  Settings,
   MessagesSquare,
   Pause,
   Play,
@@ -175,6 +176,7 @@ function ChatRoom({ room }: { room: Room }) {
     ),
     [details, setDetails] = useState(false),
     [addOpen, setAddOpen] = useState(false),
+    [settingsOpen, setSettingsOpen] = useState(false),
     [agentId, setAgentId] = useState(''),
     [submitting, setSubmitting] = useState(false);
   const end = useRef<HTMLDivElement>(null),
@@ -502,7 +504,7 @@ function ChatRoom({ room }: { room: Room }) {
         <>
           <ResourcesPanel key={`resources:${room.id}`} roomId={room.id} />
           <MessageSearchPanel key={`search:${room.id}`} room={room} onNavigate={jumpToMessage} />
-          <ConversationSettingsPanel key={`${room.id}:${room.version}`} room={room} />
+
           <ConversationMemoryPanel key={room.id} roomId={room.id} onNavigate={jumpToMessage} />
         </>
       )}
@@ -586,6 +588,14 @@ function ChatRoom({ room }: { room: Room }) {
             {mode === 'demo' ? t.chat.demo : t.chat.connected}
           </span>
           <div className="button-group">
+            <button
+              className="icon-button"
+              aria-label={t.conversationSettings.title}
+              title={t.conversationSettings.title}
+              onClick={() => setSettingsOpen(true)}
+            >
+              <Settings size={18} />
+            </button>
             {room.status !== 'stopped' && (
               <>
                 <button
@@ -959,6 +969,15 @@ function ChatRoom({ room }: { room: Room }) {
       </Modal>
       <Modal open={details} onClose={() => setDetails(false)} title={t.chat.overview}>
         <div className="mobile-inspector">{info}</div>
+      </Modal>
+      <Modal
+        open={settingsOpen}
+        onClose={() => setSettingsOpen(false)}
+        title={t.conversationSettings.title}
+      >
+        {settingsOpen && (
+          <ConversationSettingsPanel key={`${room.id}:${room.version}`} room={room} />
+        )}
       </Modal>
       <Modal open={addOpen} onClose={() => setAddOpen(false)} title={t.chat.add}>
         <div className="modal-form">

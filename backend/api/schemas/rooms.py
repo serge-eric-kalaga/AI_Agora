@@ -28,6 +28,14 @@ class ConversationSettings(APIModel):
 
 
 class ConversationSettingsUpdate(ConversationSettings):
+    name: str | None = Field(default=None, min_length=2, max_length=120)
+    description: str | None = Field(default=None, max_length=2_000)
+    topic: str | None = Field(default=None, min_length=5, max_length=10_000)
+    rules: str | None = Field(default=None, max_length=10_000)
+    mode: RoomMode | None = None
+    budget_limit: Decimal | None = Field(default=None, gt=0, max_digits=12, decimal_places=4)
+    max_duration_minutes: int | None = Field(default=None, ge=1, le=43_200)
+
     temporal_mode: TemporalMode | None = Field(
         default=None,
         description="Permanent : sans échéance, jusqu’à pause ou arrêt ; le budget et les permissions restent appliqués.",

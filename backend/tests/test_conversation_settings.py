@@ -82,6 +82,38 @@ def test_settings_version_permissions_and_guided_turn(client, account, pace, aut
     assert response.json()["conversationSettings"]["autonomy"] == autonomy
     assert response.json()["version"] == 2
     assert conversation_delay(room_id) == delay
+    # Les paramètres métier et les préférences sont mis à jour ensemble et diffusés.
+    changed = client.patch(
+        url,
+        headers=account["headers"],
+        json={
+            **payload,
+            "expectedVersion": 2,
+            "name": "Nouveau nom",
+            "topic": "Nouveau sujet",
+            "rules": "Répondre simplement",
+            "budgetLimit": 7,
+            "maxDurationMinutes": 120,
+        },
+    )
+    assert changed.status_code == 200, changed.text
+    assert changed.json()["name"] == "Nouveau nom"
+    assert changed.json()["topic"] == "Nouveau sujet"
+    assert changed.json()["maxDurationMinutes"] == 120
+    assert set(changed.json()["conversationSettings"]) == {"pace", "autonomy", "responseLength"}
+    with SessionLocal() as db:
+        saved = db.get(Room, room_id)
+        assert saved.version == 3
+        assert (
+            db.scalar(
+                select(ConversationEvent).where(
+                    ConversationEvent.room_id == room_id,
+                    ConversationEvent.event_type == "room.settings.updated",
+                    ConversationEvent.sequence == 3,
+                )
+            )
+            is not None
+        )
     assert client.patch(url, headers=account["headers"], json=payload).status_code == 409
     assert (_prepare_turn(room_id, event_id) is None) == (autonomy == "guided")
     with SessionLocal() as db:
@@ -90,5 +122,5 @@ def test_settings_version_permissions_and_guided_turn(client, account, pace, aut
         )
         membership.role = WorkspaceRole.OBSERVER
         db.commit()
-    payload["expectedVersion"] = 2
+    payload["expectedVersion"] = 3
     assert client.patch(url, headers=account["headers"], json=payload).status_code == 403

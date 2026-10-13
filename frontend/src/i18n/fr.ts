@@ -510,7 +510,10 @@ export const fr = {
     permanent: 'Continuer sans échéance',
     permanentHint:
       'La discussion continue jusqu’à votre pause ou votre arrêt. Le budget reste respecté.',
-    title: 'Rythme de la discussion',
+    title: 'Paramètres de la discussion',
+    duration: 'Durée maximale (minutes)',
+    liveHint:
+      'Les changements s’appliquent dès l’enregistrement et aux prochains tours des agents.',
     tools: { files: 'Lire les documents joints', web: 'Utiliser les sources jointes' },
     pace: 'Cadence',
     autonomy: 'Autonomie',

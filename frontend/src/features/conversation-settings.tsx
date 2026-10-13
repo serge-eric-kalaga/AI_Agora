@@ -1,16 +1,24 @@
 'use client';
 import { useState, type FormEvent } from 'react';
 import { useAgora } from '@/components/store';
-import { updateConversationSettings } from '@/data/http-api';
 import { conversationSettingsSchema, type Room } from '@/domain/models';
 import { t } from '@/i18n';
 
 export function ConversationSettingsPanel({ room }: { room: Room }) {
-  const { activeWorkspaceId, loadRoom, notify, workspaces } = useAgora();
+  const { activeWorkspaceId, updateRoomSettings, notify, workspaces } = useAgora();
   const [settings, setSettings] = useState(() =>
     conversationSettingsSchema.parse(room.conversationSettings ?? {}),
   );
   const [saving, setSaving] = useState(false);
+  const [details, setDetails] = useState(() => ({
+    name: room.name,
+    description: room.description,
+    topic: room.topic,
+    rules: room.rules,
+    mode: room.mode,
+    budget: room.budget,
+    maxMinutes: room.maxMinutes,
+  }));
   const [tools, setTools] = useState(room.tools);
   const [permanent, setPermanent] = useState(room.temporalMode === 'permanent');
   const editable =
@@ -20,14 +28,17 @@ export function ConversationSettingsPanel({ room }: { room: Room }) {
     if (!activeWorkspaceId || saving) return;
     setSaving(true);
     try {
-      await updateConversationSettings(
-        activeWorkspaceId,
-        room,
-        settings,
+      await updateRoomSettings({
+        ...room,
+        ...details,
+        conversationSettings: settings,
         tools,
-        permanent ? 'permanent' : room.temporalMode === 'permanent' ? 'live' : room.temporalMode,
-      );
-      await loadRoom(room.id);
+        temporalMode: permanent
+          ? 'permanent'
+          : room.temporalMode === 'permanent'
+            ? 'live'
+            : room.temporalMode,
+      });
       notify(t.conversationSettings.saved);
     } catch (error) {
       notify(error instanceof Error ? error.message : t.shell.storageError);
@@ -37,9 +48,72 @@ export function ConversationSettingsPanel({ room }: { room: Room }) {
   }
   return (
     <section className="inspector-section">
-      <h3>{t.conversationSettings.title}</h3>
       <form onSubmit={save} aria-busy={saving}>
         <fieldset disabled={saving || !editable} style={{ border: 0, padding: 0, minWidth: 0 }}>
+          <p className="muted">{t.conversationSettings.liveHint}</p>
+          <label className="field">
+            {t.rooms.name}
+            <input
+              required
+              minLength={2}
+              maxLength={120}
+              value={details.name}
+              onChange={(event) => setDetails({ ...details, name: event.target.value })}
+            />
+          </label>
+          {(['description', 'topic', 'rules'] as const).map((field) => (
+            <label className="field" key={field}>
+              {t.rooms[field]}
+              <textarea
+                required={field === 'topic'}
+                minLength={field === 'topic' ? 5 : undefined}
+                maxLength={field === 'description' ? 2000 : 10000}
+                value={details[field]}
+                onChange={(event) => setDetails({ ...details, [field]: event.target.value })}
+              />
+            </label>
+          ))}
+          <label className="field">
+            {t.rooms.mode}
+            <select
+              value={details.mode}
+              onChange={(event) =>
+                setDetails({ ...details, mode: event.target.value as Room['mode'] })
+              }
+            >
+              {Object.entries(t.rooms.modes).map(([value, label]) => (
+                <option key={value} value={value}>
+                  {label}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="field">
+            {t.chat.budget}
+            <input
+              required
+              type="number"
+              min={Math.max(room.spent, 0.0001)}
+              step="0.0001"
+              value={details.budget}
+              onChange={(event) => setDetails({ ...details, budget: Number(event.target.value) })}
+            />
+          </label>
+          <label className="field">
+            {t.conversationSettings.duration}
+            <input
+              required
+              type="number"
+              min={1}
+              max={43200}
+              step={1}
+              value={details.maxMinutes}
+              onChange={(event) =>
+                setDetails({ ...details, maxMinutes: Number(event.target.value) })
+              }
+            />
+          </label>
+
           <label className="field">
             {t.conversationSettings.pace}
             <select
@@ -100,6 +174,7 @@ export function ConversationSettingsPanel({ room }: { room: Room }) {
             <span>
               <input
                 type="checkbox"
+                style={{ width: 'auto' }}
                 checked={permanent}
                 onChange={(event) => setPermanent(event.target.checked)}
               />
@@ -112,6 +187,7 @@ export function ConversationSettingsPanel({ room }: { room: Room }) {
               <span>
                 <input
                   type="checkbox"
+                  style={{ width: 'auto' }}
                   checked={tools.includes(tool)}
                   onChange={(event) =>
                     setTools((previous) =>

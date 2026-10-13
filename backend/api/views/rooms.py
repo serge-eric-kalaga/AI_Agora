@@ -797,8 +797,8 @@ def request_memory(
 @router.patch(
     "/{room_id}/conversation-settings",
     response_model=RoomRead,
-    summary="Régler le rythme, l'autonomie et la longueur des réponses",
-    description="Réservé aux membres pouvant écrire. Le contrôle de version et le verrou serveur évitent les écrasements concurrents. Les réglages prennent effet au prochain tour ; ils ne coupent pas une génération en cours. La capacité réelle d'Ollama peut prolonger la pause minimale.",
+    summary="Modifier les paramètres d’une discussion en direct",
+    description="Réservé aux membres pouvant écrire. Le contrôle de version et le verrou serveur évitent les écrasements concurrents. Le nom, le sujet, les consignes, le format, le budget, la durée et les préférences sont modifiables. Un événement SSE diffuse les changements aux personnes connectées. Les réglages prennent effet au prochain tour ; ils ne coupent pas une génération en cours. La capacité réelle d'Ollama peut prolonger la pause minimale.",
     responses={
         403: {"description": "Observateur ou membre non autorisé"},
         409: {"description": "Version obsolète"},
@@ -821,7 +821,26 @@ def update_conversation_settings(
         raise ConflictError(
             "stale_room_version", "La salle a changé ; rechargez-la avant de réessayer."
         )
-    room.conversation_settings = payload.model_dump(exclude={"expected_version", "tools", "temporal_mode"})
+    if payload.budget_limit is not None and payload.budget_limit < room.amount_spent:
+        raise DomainError(
+            "budget_below_spent",
+            "Le budget ne peut pas être inférieur au montant déjà dépensé.",
+            422,
+        )
+    # Les préférences du modèle restent séparées des attributs métier de la salle.
+    room.conversation_settings = payload.model_dump(include={"pace", "autonomy", "response_length"})
+    for field in (
+        "name",
+        "description",
+        "topic",
+        "rules",
+        "mode",
+        "budget_limit",
+        "max_duration_minutes",
+    ):
+        value = getattr(payload, field)
+        if value is not None:
+            setattr(room, field, value)
     if payload.temporal_mode is not None:
         room.temporal_mode = payload.temporal_mode
     if payload.tools is not None:

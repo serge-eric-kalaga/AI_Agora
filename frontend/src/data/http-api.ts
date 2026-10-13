@@ -683,6 +683,10 @@ export async function updateConversationSettings(
   settings: ConversationSettings,
   tools?: Room['tools'],
   temporalMode?: Room['temporalMode'],
+  details?: Pick<
+    Room,
+    'name' | 'description' | 'topic' | 'rules' | 'mode' | 'budget' | 'maxMinutes'
+  >,
 ) {
   return mapRoom(
     await request(
@@ -693,6 +697,17 @@ export async function updateConversationSettings(
         body: JSON.stringify({
           ...settings,
           expectedVersion: room.version,
+          ...(details
+            ? {
+                name: details.name,
+                description: details.description,
+                topic: details.topic,
+                rules: details.rules,
+                mode: details.mode,
+                budgetLimit: details.budget,
+                maxDurationMinutes: details.maxMinutes,
+              }
+            : {}),
           ...(tools ? { tools } : {}),
           ...(temporalMode ? { temporalMode } : {}),
         }),

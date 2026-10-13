@@ -8,6 +8,8 @@ import {
   useState,
   type ReactNode,
 } from 'react';
+import { conversationSettingsSchema } from '@/domain/models';
+import { updateConversationSettings } from '@/data/http-api';
 import { transition, type Command, type Envelope } from '@/domain/engine';
 import type {
   Agent,
@@ -62,6 +64,7 @@ type Store = {
   testProvider: (provider: Provider) => Promise<{ reachable: boolean; message: string }>;
   saveAgent: (draft: AgentDraft, existing?: Agent) => Promise<Agent>;
   createRoom: (draft: RoomDraft, running: boolean) => Promise<Room>;
+  updateRoomSettings: (room: Room) => Promise<Room>;
   loadRoom: (roomId: string) => Promise<{ nextCursor: string | null }>;
   loadOlderMessages: (
     roomId: string,
@@ -342,6 +345,26 @@ export function AgoraProvider({ children }: { children: ReactNode }) {
     [activeWorkspaceId],
   );
 
+  async function updateRoomSettings(room: Room): Promise<Room> {
+    if (demoMode) {
+      const saved = { ...room, version: room.version + 1 };
+      send({ room: saved });
+      return saved;
+    }
+    if (!activeWorkspaceId) throw new Error(t.session.noWorkspace);
+    const saved = await updateConversationSettings(
+      activeWorkspaceId,
+      room,
+      conversationSettingsSchema.parse(room.conversationSettings ?? {}),
+      room.tools,
+      room.temporalMode,
+      room,
+    );
+    // Actualise immédiatement la salle sans recharger ni remplacer l’historique lu.
+    send({ room: saved });
+    return saved;
+  }
+
   async function setRoomStatus(room: Room, status: Room['status']) {
     if (demoMode) {
       dispatch({ type: 'room.status', roomId: room.id, status });
@@ -439,6 +462,7 @@ export function AgoraProvider({ children }: { children: ReactNode }) {
         saveAgent,
         createRoom,
         loadRoom,
+        updateRoomSettings,
         loadOlderMessages,
         setRoomStatus,
         setParticipant,
