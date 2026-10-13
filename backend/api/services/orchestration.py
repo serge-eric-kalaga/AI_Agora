@@ -8,7 +8,7 @@ from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from uuid import UUID
 
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 
 from api.database import SessionLocal
 from api.database.models import (
@@ -52,6 +52,7 @@ class TurnContext:
     triggered_by_user: bool
     target_author_kind: str
     target_author_name: str
+    thread_root_id: UUID | None = None
 
 
 def _bounded_number(value: object, default: float, minimum: float, maximum: float) -> float:
@@ -321,7 +322,11 @@ def _prepare_turn(room_id: UUID, trigger_event_id: UUID) -> TurnContext | None:
             return None
         latest_message_id = db.scalar(
             select(Message.id)
-            .where(Message.room_id == room.id, Message.kind == MessageKind.MESSAGE)
+            .where(
+                Message.room_id == room.id,
+                Message.kind == MessageKind.MESSAGE,
+                Message.thread_root_id == trigger_message.thread_root_id,
+            )
             .order_by(Message.created_at.desc(), Message.id.desc())
             .limit(1)
         )
@@ -362,14 +367,22 @@ def _prepare_turn(room_id: UUID, trigger_event_id: UUID) -> TurnContext | None:
             return None
         contribution_rows = db.execute(
             select(Message.author_agent_id, func.count(Message.id))
-            .where(Message.room_id == room.id, Message.author_agent_id.is_not(None))
+            .where(
+                Message.room_id == room.id,
+                Message.author_agent_id.is_not(None),
+                Message.thread_root_id == trigger_message.thread_root_id,
+            )
             .group_by(Message.author_agent_id)
         ).all()
         contributions = {agent_id: count for agent_id, count in contribution_rows}
         recent_speakers = list(
             db.scalars(
                 select(Message.author_agent_id)
-                .where(Message.room_id == room.id, Message.author_agent_id.is_not(None))
+                .where(
+                    Message.room_id == room.id,
+                    Message.author_agent_id.is_not(None),
+                    Message.thread_root_id == trigger_message.thread_root_id,
+                )
                 .order_by(Message.created_at.desc(), Message.id.desc())
                 .limit(4)
             )
@@ -429,7 +442,16 @@ def _prepare_turn(room_id: UUID, trigger_event_id: UUID) -> TurnContext | None:
             )
         history = db.scalars(
             select(Message)
-            .where(Message.room_id == room.id, Message.kind == MessageKind.MESSAGE)
+            .where(
+                Message.room_id == room.id,
+                Message.kind == MessageKind.MESSAGE,
+                or_(
+                    Message.thread_root_id == trigger_message.thread_root_id,
+                    Message.id == trigger_message.thread_root_id,
+                )
+                if trigger_message.thread_root_id
+                else Message.thread_root_id.is_(None),
+            )
             .order_by(Message.created_at.desc())
             .limit(9)
         ).all()
@@ -547,6 +569,7 @@ def _prepare_turn(room_id: UUID, trigger_event_id: UUID) -> TurnContext | None:
             trigger_message.author_user_id is not None,
             target_author_kind,
             target_author_name,
+            trigger_message.thread_root_id,
         )
 
 
@@ -566,7 +589,10 @@ def _publish_typing(context: TurnContext, typing: bool) -> None:
             db,
             context.room_id,
             event_type,
-            {"agentId": str(context.agent_id)},
+            {
+                "agentId": str(context.agent_id),
+                "threadRootId": str(context.thread_root_id) if context.thread_root_id else None,
+            },
             actor_agent_id=context.agent_id,
         )
         db.commit()
@@ -636,7 +662,11 @@ def execute_room_turn(room_id: UUID, trigger_event_id: UUID) -> dict[str, str]:
             return {"status": "skipped", "roomId": str(room_id)}
         latest_message_id = db.scalar(
             select(Message.id)
-            .where(Message.room_id == room.id, Message.kind == MessageKind.MESSAGE)
+            .where(
+                Message.room_id == room.id,
+                Message.kind == MessageKind.MESSAGE,
+                Message.thread_root_id == context.thread_root_id,
+            )
             .order_by(Message.created_at.desc(), Message.id.desc())
             .limit(1)
         )
@@ -656,6 +686,7 @@ def execute_room_turn(room_id: UUID, trigger_event_id: UUID) -> dict[str, str]:
             room_id=room.id,
             author_agent_id=context.agent_id,
             reply_to_id=context.trigger_message_id,
+            thread_root_id=context.thread_root_id,
             content=_clean_generated_content(
                 result.content,
                 context.participant_names,
@@ -707,6 +738,7 @@ def execute_room_turn(room_id: UUID, trigger_event_id: UUID) -> dict[str, str]:
             "message.created",
             {
                 "messageId": str(message.id),
+                "threadRootId": str(context.thread_root_id) if context.thread_root_id else None,
                 "triggerEventId": str(trigger_event_id),
                 "chainDepth": context.chain_depth + 1,
             },

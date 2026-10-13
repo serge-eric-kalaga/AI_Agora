@@ -3947,3 +3947,30 @@ td > svg {
     visibility: visible;
   }
 }
+
+.thread-panel {
+  display: grid;
+  gap: 16px;
+}
+.thread-root {
+  padding: 12px;
+  border-left: 3px solid var(--accent);
+  background: var(--surface);
+}
+.thread-messages {
+  max-height: 45vh;
+  overflow-y: auto;
+  overflow-anchor: none;
+}
+.thread-messages article {
+  padding: 16px 4px;
+  border-bottom: 1px solid var(--border);
+  overflow-wrap: anywhere;
+}
+.thread-messages time {
+  color: var(--muted);
+  font-size: 11px;
+}
+.thread-messages p {
+  line-height: 1.8;
+}

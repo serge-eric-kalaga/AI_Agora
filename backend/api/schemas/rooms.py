@@ -108,6 +108,9 @@ class ParticipantUpdate(APIModel):
 class MessageCreate(APIModel):
     content: str = Field(min_length=1, max_length=50_000)
     reply_to_id: UUID | None = None
+    thread_root_id: UUID | None = Field(
+        default=None, description="Message racine du fil ; absent pour la conversation principale."
+    )
 
 
 class ReactionActorRead(APIModel):
@@ -134,6 +137,7 @@ class MessageRead(APIModel):
     author_user_id: UUID | None
     author_agent_id: UUID | None
     reply_to_id: UUID | None
+    thread_root_id: UUID | None = None
     kind: MessageKind
     content: str
     reactions: list[ReactionRead] = Field(default_factory=list)

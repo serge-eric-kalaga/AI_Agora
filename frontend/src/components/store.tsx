@@ -398,6 +398,7 @@ export function AgoraProvider({ children }: { children: ReactNode }) {
       const unsubscribe = subscribeRoomEvents(activeWorkspaceId, roomId, cursor, (event) => {
         window.sessionStorage.setItem(key, event.cursor);
         if ((event.type === 'agent.typing' || event.type === 'agent.idle') && event.agentId) {
+          if (event.threadRootId) return;
           onTyping?.(event.agentId, event.type === 'agent.typing');
           return;
         }

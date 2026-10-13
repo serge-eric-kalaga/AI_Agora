@@ -9,7 +9,7 @@ from uuid import UUID
 from celery.exceptions import OperationalError
 from redis import Redis
 from redis.exceptions import RedisError
-from sqlalchemy import select
+from sqlalchemy import func, select
 
 from api.celery_app import celery_app
 from api.configs import get_settings
@@ -139,33 +139,41 @@ def recover_active_rooms() -> dict[str, int]:
                         continue
                     if client.exists(f"ai-agora:room:{room.id}:turn"):
                         continue
-                    event = db.scalar(
-                        select(ConversationEvent)
+                    latest_sequences = (
+                        select(func.max(ConversationEvent.sequence))
                         .where(
                             ConversationEvent.room_id == room.id,
                             ConversationEvent.event_type == "message.created",
                         )
-                        .order_by(ConversationEvent.sequence.desc())
-                        .limit(1)
+                        .group_by(ConversationEvent.payload["threadRootId"].as_string())
                     )
-                    if not event:
-                        continue
-                    if (room.conversation_settings or {}).get(
-                        "autonomy"
-                    ) == "guided" and event.actor_agent_id:
-                        continue
-                    marker = cast(
-                        bytes | str | None,
-                        client.get(f"ai-agora:room:{room.id}:scheduled:{event.id}"),
-                    )
-                    try:
-                        age = time.time() - float(marker) if marker else float("inf")
-                    except (ValueError, TypeError):
-                        age = float("inf")  # Compatibilité avec l'ancien marqueur « 1 ».
-                    if age < settings.room_recovery_stale_seconds:
-                        continue
-                    if schedule_room_turn(str(room.id), str(event.id), force=True):
-                        scheduled += 1
+                    events = db.scalars(
+                        select(ConversationEvent).where(
+                            ConversationEvent.room_id == room.id,
+                            ConversationEvent.sequence.in_(latest_sequences),
+                        )
+                    ).all()
+                    # Chaque fil conserve sa propre reprise ; un message principal
+                    # ne doit pas supprimer l'initiative d'une discussion parallèle.
+                    for event in events:
+                        if not event:
+                            continue
+                        if (room.conversation_settings or {}).get(
+                            "autonomy"
+                        ) == "guided" and event.actor_agent_id:
+                            continue
+                        marker = cast(
+                            bytes | str | None,
+                            client.get(f"ai-agora:room:{room.id}:scheduled:{event.id}"),
+                        )
+                        try:
+                            age = time.time() - float(marker) if marker else float("inf")
+                        except (ValueError, TypeError):
+                            age = float("inf")  # Compatibilité avec l'ancien marqueur « 1 ».
+                        if age < settings.room_recovery_stale_seconds:
+                            continue
+                        if schedule_room_turn(str(room.id), str(event.id), force=True):
+                            scheduled += 1
         finally:
             lock.release()
     finally:

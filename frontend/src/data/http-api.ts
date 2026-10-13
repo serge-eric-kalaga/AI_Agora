@@ -86,6 +86,7 @@ const messageReadSchema = z.object({
   roomId: z.string(),
   authorAgentId: z.string().nullable(),
   replyToId: z.string().nullable(),
+  threadRootId: z.string().nullable().optional(),
   kind: z.enum(['message', 'system']),
   content: z.string(),
   reactions: z.array(
@@ -276,6 +277,7 @@ function mapMessage(value: z.infer<typeof messageReadSchema>): Message {
     reactions,
     reactionActors,
     ...(value.replyToId ? { replyTo: value.replyToId } : {}),
+    ...(value.threadRootId ? { threadRootId: value.threadRootId } : {}),
   };
 }
 
@@ -412,6 +414,7 @@ export async function persistMessage(
   roomId: string,
   content: string,
   replyToId?: string,
+  threadRootId?: string,
 ) {
   const result = await request(
     `/api/backend/workspaces/${workspaceId}/rooms/${roomId}/messages`,
@@ -419,7 +422,11 @@ export async function persistMessage(
     {
       method: 'POST',
       headers: { 'x-idempotency-key': crypto.randomUUID() },
-      body: JSON.stringify({ content, ...(replyToId ? { replyToId } : {}) }),
+      body: JSON.stringify({
+        content,
+        ...(replyToId ? { replyToId } : {}),
+        ...(threadRootId ? { threadRootId } : {}),
+      }),
     },
   );
   return mapMessage(result);
@@ -444,7 +451,12 @@ export function subscribeRoom(
   workspaceId: string,
   roomId: string,
   cursor: string,
-  onEvent: (event: { cursor: string; type: string; agentId?: string }) => void,
+  onEvent: (event: {
+    cursor: string;
+    type: string;
+    agentId?: string;
+    threadRootId?: string | null;
+  }) => void,
 ) {
   let source: EventSource | null = null;
   let currentCursor = cursor;
@@ -492,13 +504,17 @@ export function subscribeRoom(
       lastActivity = Date.now();
       currentCursor = message.lastEventId || currentCursor;
       let agentId: string | undefined;
+      let threadRootId: string | null | undefined;
       try {
-        const data = JSON.parse(message.data) as { payload?: { agentId?: string } };
+        const data = JSON.parse(message.data) as {
+          payload?: { agentId?: string; threadRootId?: string | null };
+        };
         agentId = data.payload?.agentId;
+        threadRootId = data.payload?.threadRootId;
       } catch {
         // Un événement métier reste exploitable même si sa charge utile est absente.
       }
-      onEvent({ cursor: currentCursor, type: event.type, agentId });
+      onEvent({ cursor: currentCursor, type: event.type, agentId, threadRootId });
     };
     eventTypes.forEach((type) => candidate.addEventListener(type, listener));
     candidate.onerror = () => {
@@ -646,4 +662,24 @@ export async function readMessageContext(workspaceId: string, roomId: string, me
     pageOf(messageReadSchema),
   );
   return page.items.map(mapMessage);
+}
+
+export async function readThreadMessages(
+  workspaceId: string,
+  roomId: string,
+  rootId: string,
+  before?: string,
+  signal?: AbortSignal,
+) {
+  const query = new URLSearchParams({
+    thread_root_id: rootId,
+    limit: '50',
+    ...(before ? { before } : {}),
+  });
+  const page = await request(
+    `/api/backend/workspaces/${workspaceId}/rooms/${roomId}/messages?${query}`,
+    pageOf(messageReadSchema),
+    { signal },
+  );
+  return { messages: page.items.map(mapMessage), nextCursor: page.nextCursor };
 }

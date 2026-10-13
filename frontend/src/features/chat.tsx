@@ -34,6 +34,8 @@ import { ToolChips } from './agents';
 import { ConversationMemoryPanel } from './conversation-memory';
 import { ConversationSettingsPanel } from './conversation-settings';
 import { MessageSearchPanel } from './message-search';
+import { ThreadPanel } from './threads';
+import { readMessageContext } from '@/data/http-api';
 import { effectiveTools } from '@/domain/engine';
 import { downloadJson } from '@/data/repository';
 import { t, formatMoney, formatTime } from '@/i18n';
@@ -144,6 +146,7 @@ export function Chat({ id }: { id: string }) {
 function ChatRoom({ room }: { room: Room }) {
   const {
     state,
+    activeWorkspaceId,
     dispatch,
     mode,
     loadRoom,
@@ -155,6 +158,8 @@ function ChatRoom({ room }: { room: Room }) {
     subscribeRoom,
     notify,
   } = useAgora();
+  const [threadRoot, setThreadRoot] = useState<string | null>(null);
+  const [threadFocus, setThreadFocus] = useState<string | null>(null);
   const [text, setText] = useState(''),
     [replyTo, setReplyTo] = useState<Message | null>(null),
     [mention, setMention] = useState<{ start: number; end: number; query: string } | null>(null),
@@ -180,7 +185,7 @@ function ChatRoom({ room }: { room: Room }) {
     saveScrollFrame = useRef<number | null>(null),
     highlightTimer = useRef<ReturnType<typeof setTimeout> | null>(null),
     composer = useRef<HTMLTextAreaElement>(null);
-  const messages = state.messages.filter((m) => m.roomId === room.id);
+  const messages = state.messages.filter((m) => m.roomId === room.id && !m.threadRootId);
   const participants = state.agents.filter((a) => room.agentIds.includes(a.id));
   const mentionSuggestions = mention
     ? participants.filter((agent) =>
@@ -310,6 +315,15 @@ function ChatRoom({ room }: { room: Room }) {
     followsLatest.current = false;
     setShowScrollToBottom(true);
     let target = document.getElementById(`message-${messageId}`);
+    if (!target && mode === 'api' && activeWorkspaceId) {
+      const context = await readMessageContext(activeWorkspaceId, room.id, messageId);
+      const requested = context.find((message) => message.id === messageId);
+      if (requested?.threadRootId) {
+        setThreadFocus(requested.id);
+        setThreadRoot(requested.threadRootId);
+        return;
+      }
+    }
     while (!target && olderCursor.current) {
       const page = await fetchOlderMessages(false);
       if (!page) break;
@@ -656,6 +670,19 @@ function ChatRoom({ room }: { room: Room }) {
                     >
                       <Reply size={14} />
                     </button>
+                    {mode === 'api' && message.kind === 'message' && (
+                      <button
+                        className="icon-button"
+                        aria-label={t.threads.open}
+                        title={t.threads.open}
+                        onClick={() => {
+                          setThreadFocus(null);
+                          setThreadRoot(message.id);
+                        }}
+                      >
+                        <MessagesSquare size={14} />
+                      </button>
+                    )}
                   </div>
                   {message.replyTo && (
                     <button
@@ -901,6 +928,16 @@ function ChatRoom({ room }: { room: Room }) {
         </div>
       </section>
       {inspectorOpen && <aside className="room-inspector">{info}</aside>}
+      <Modal open={threadRoot !== null} onClose={() => setThreadRoot(null)} title={t.threads.title}>
+        {threadRoot && (
+          <ThreadPanel
+            key={threadRoot}
+            room={room}
+            rootId={threadRoot}
+            focusId={threadFocus ?? undefined}
+          />
+        )}
+      </Modal>
       <Modal open={details} onClose={() => setDetails(false)} title={t.chat.overview}>
         <div className="mobile-inspector">{info}</div>
       </Modal>

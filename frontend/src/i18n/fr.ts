@@ -427,6 +427,16 @@ export const fr = {
       desaccord: 'Désaccord',
     },
   },
+  threads: {
+    title: 'Fil de discussion',
+    open: 'Ouvrir un fil',
+    loading: 'Chargement du fil…',
+    placeholder: 'Poursuivre ce fil…',
+    send: 'Envoyer',
+    older: 'Messages précédents',
+    latest: 'Derniers messages',
+    root: 'Message initial',
+  },
   messageSearch: {
     title: 'Rechercher dans la discussion',
     text: 'Texte',

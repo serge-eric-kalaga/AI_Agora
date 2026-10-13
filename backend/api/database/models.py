@@ -252,6 +252,9 @@ class Message(Base, TimestampMixin):
     reply_to_id: Mapped[uuid.UUID | None] = mapped_column(
         ForeignKey("messages.id", ondelete="SET NULL"), nullable=True
     )
+    thread_root_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("messages.id", ondelete="SET NULL"), nullable=True, index=True
+    )
     kind: Mapped[MessageKind] = mapped_column(Enum(MessageKind), default=MessageKind.MESSAGE)
     content: Mapped[str] = mapped_column(Text)
     idempotency_key: Mapped[str] = mapped_column(String(100))

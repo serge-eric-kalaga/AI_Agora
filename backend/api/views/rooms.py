@@ -21,6 +21,7 @@ from api.database.models import (
     ConversationEvent,
     IdempotencyRecord,
     Message,
+    MessageKind,
     MessageReaction,
     Room,
     RoomMemory,
@@ -183,6 +184,7 @@ def _message_read(db: DbSession, message: Message, user_id: UUID) -> MessageRead
         author_user_id=message.author_user_id,
         author_agent_id=message.author_agent_id,
         reply_to_id=message.reply_to_id,
+        thread_root_id=message.thread_root_id,
         kind=message.kind,
         content=message.content,
         metadata=message.metadata_json,
@@ -454,10 +456,28 @@ def list_messages(
         default=None, description="Identifiant du plus ancien message affiché."
     ),
     limit: int = Query(default=50, ge=1, le=100),
+    thread_root_id: UUID | None = Query(
+        default=None,
+        description="Fil à consulter, avec son message racine. Absent : conversation principale.",
+    ),
 ) -> Page[MessageRead]:
     require_workspace_member(db, workspace_id, current_user)
     _room(db, workspace_id, room_id)
-    query = select(Message).where(Message.room_id == room_id)
+    if thread_root_id:
+        root = db.get(Message, thread_root_id)
+        if (
+            not root
+            or root.room_id != room_id
+            or root.thread_root_id
+            or root.kind != MessageKind.MESSAGE
+        ):
+            raise NotFoundError("thread_not_found", "Le fil est introuvable dans cette salle.")
+    query = select(Message).where(
+        Message.room_id == room_id,
+        or_(Message.thread_root_id == thread_root_id, Message.id == thread_root_id)
+        if thread_root_id
+        else Message.thread_root_id.is_(None),
+    )
     if before:
         cursor_message = db.get(Message, before)
         if not cursor_message or cursor_message.room_id != room_id:
@@ -517,14 +537,33 @@ def create_message(
         raise DomainError(
             "cost_budget_exhausted", "Le budget financier de l'arène est épuisé.", 422
         )
+    reply = None
     if payload.reply_to_id:
         reply = db.get(Message, payload.reply_to_id)
         if not reply or reply.room_id != room.id:
             raise DomainError(
                 "invalid_reply", "Le message cité n'appartient pas à cette arène.", 422
             )
+    if payload.thread_root_id:
+        root = db.get(Message, payload.thread_root_id)
+        if (
+            not root
+            or root.room_id != room.id
+            or root.thread_root_id
+            or root.kind != MessageKind.MESSAGE
+        ):
+            raise DomainError(
+                "invalid_thread", "La racine du fil doit appartenir à cette salle.", 422
+            )
+        if reply and reply.id != root.id and reply.thread_root_id != root.id:
+            raise DomainError(
+                "invalid_thread_reply", "Le message cité appartient à un autre fil.", 422
+            )
+    elif reply and reply.thread_root_id:
+        raise DomainError("invalid_thread_reply", "Répondez à ce message dans son fil.", 422)
     message = Message(
         room_id=room.id,
+        thread_root_id=payload.thread_root_id,
         author_user_id=current_user.id,
         reply_to_id=payload.reply_to_id,
         content=payload.content,
@@ -536,7 +575,10 @@ def create_message(
         db,
         room.id,
         "message.created",
-        {"messageId": str(message.id)},
+        {
+            "messageId": str(message.id),
+            "threadRootId": str(message.thread_root_id) if message.thread_root_id else None,
+        },
         actor_user_id=current_user.id,
         idempotency_key=idempotency_key,
     )
@@ -866,7 +908,9 @@ def message_context(
     target = db.get(Message, message_id)
     if not target or target.room_id != room_id:
         raise NotFoundError("message_not_found", "Le message est introuvable dans cette salle.")
-    query = select(Message).where(Message.room_id == room_id)
+    query = select(Message).where(
+        Message.room_id == room_id, Message.thread_root_id == target.thread_root_id
+    )
     earlier = list(
         reversed(
             db.scalars(

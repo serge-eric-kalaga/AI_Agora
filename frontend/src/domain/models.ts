@@ -55,6 +55,7 @@ export const messageSchema = z.object({
     )
     .optional(),
   replyTo: z.string().optional(),
+  threadRootId: z.string().optional(),
 });
 export const conversationSettingsSchema = z.object({
   pace: z.enum(['calm', 'normal', 'animated']).default('normal'),
