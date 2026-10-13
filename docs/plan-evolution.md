@@ -15,7 +15,7 @@ Les statuts ci-dessous représentent l'intégration et la validation réelles.
 | 6 | Documents PDF/texte et consultation de sources référencées | Livré : 48 tests backend, extraction PDF, permissions, URL publiques contrôlées ; document/source/citation Ollama et téléchargement réel validés |
 | 7 | Invitations, rôles et notifications de mentions/réponses | Livré : droits et liens à usage unique testés ; invitation réelle, notification et accès direct au message validés |
 | 8 | Vérification transverse, documentation, déploiement local | Livré : sessions renouvelables, Docker, migrations et parcours réels ; 58 tests backend et 12 tests frontend |
-| 9 | Compte superadmin, vue globale utilisateurs et salles | Livré : compte créé, accès global en lecture et refus des comptes standards testés ; interface sécurisée |
+| 9 | Compte superadmin, vue globale utilisateurs et salles | Livré : compte créé, accès global dans les pages habituelles (salles en direct, agents, fournisseurs et statistiques), sans page admin séparée ; isolation des comptes standards et révocation immédiate testées |
 
 ## Critères communs
 

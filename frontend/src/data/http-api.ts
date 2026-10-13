@@ -29,6 +29,7 @@ const workspaceSchema = z.object({
 });
 const providerReadSchema = z.object({
   id: z.string(),
+  workspaceId: z.string(),
   name: z.string(),
   kind: z.enum(['cloud', 'local', 'openai_compatible']),
   baseUrl: z.string().nullable(),
@@ -44,6 +45,7 @@ const providerTestSchema = z.object({
 });
 const agentReadSchema = z.object({
   id: z.string(),
+  workspaceId: z.string(),
   providerId: z.string(),
   name: z.string(),
   role: z.string(),
@@ -59,6 +61,7 @@ const agentReadSchema = z.object({
 });
 const roomReadSchema = z.object({
   id: z.string(),
+  workspaceId: z.string(),
   name: z.string(),
   description: z.string(),
   topic: z.string(),
@@ -150,8 +153,18 @@ export class ApiError extends Error {
   }
 }
 
+// Chaque ressource conserve son espace réel, même dans la vue globale du superadmin.
+const resourceWorkspaces = new Map<string, string>();
+export function scopedResourcePath(path: string): string {
+  const match = path.match(
+    /^\/api\/backend\/workspaces\/[^/]+\/(rooms|agents|providers)\/([^/?]+)/,
+  );
+  const workspace = match && resourceWorkspaces.get(`${match[1]}:${match[2]}`);
+  return workspace ? path.replace(/(\/workspaces\/)[^/]+/, `$1${workspace}`) : path;
+}
+
 async function request<T>(path: string, schema: z.ZodType<T>, init?: RequestInit): Promise<T> {
-  const response = await fetch(path, {
+  const response = await fetch(scopedResourcePath(path), {
     ...init,
     headers: { 'content-type': 'application/json', ...init?.headers },
     cache: 'no-store',
@@ -173,6 +186,7 @@ function pageOf<T>(item: z.ZodType<T>) {
 }
 
 function mapProvider(value: z.infer<typeof providerReadSchema>, index = 0): Provider {
+  resourceWorkspaces.set(`providers:${value.id}`, value.workspaceId);
   return {
     id: value.id,
     name: value.name,
@@ -190,6 +204,7 @@ function boundedTrait(value: number | undefined, fallback: number) {
 }
 
 function mapAgent(value: z.infer<typeof agentReadSchema>): Agent {
+  resourceWorkspaces.set(`agents:${value.id}`, value.workspaceId);
   const tools = value.tools.filter((tool): tool is Agent['tools'][number] =>
     ['web', 'files', 'code'].includes(tool),
   );
@@ -217,6 +232,7 @@ function mapAgent(value: z.infer<typeof agentReadSchema>): Agent {
 }
 
 function mapRoom(value: z.infer<typeof roomReadSchema>): Room {
+  resourceWorkspaces.set(`rooms:${value.id}`, value.workspaceId);
   return {
     id: value.id,
     name: value.name,
@@ -292,6 +308,7 @@ export async function readSession(): Promise<AgoraUser | null> {
   const payload = await response.json().catch(() => null);
   if (!response.ok)
     throw new ApiError(payload?.error?.message ?? 'Session indisponible.', response.status);
+  resourceWorkspaces.clear();
   return userSchema.parse(payload.user);
 }
 
@@ -303,11 +320,13 @@ export async function authenticate(
     method: 'POST',
     body: JSON.stringify(payload),
   });
+  resourceWorkspaces.clear();
   return result.user;
 }
 
 export async function endSession() {
   const response = await fetch('/api/session', { method: 'DELETE' });
+  resourceWorkspaces.clear();
   if (!response.ok)
     throw new ApiError('Impossible de fermer la session. Réessayez.', response.status);
 }
@@ -317,7 +336,22 @@ export async function listWorkspaces(): Promise<Workspace[]> {
   return result.items;
 }
 
-export async function listWorkspaceData(workspaceId: string) {
+export async function listWorkspaceData(
+  workspaceId: string,
+  globalWorkspaces?: Workspace[],
+): Promise<{ providers: Provider[]; agents: Agent[]; rooms: Room[] }> {
+  if (globalWorkspaces) {
+    const data = await Promise.all(
+      globalWorkspaces.map((workspace) => listWorkspaceData(workspace.id)),
+    );
+    return {
+      providers: data.flatMap((item) => item.providers),
+      agents: data.flatMap((item) => item.agents),
+      rooms: data
+        .flatMap((item) => item.rooms)
+        .sort((a, b) => b.createdAt.localeCompare(a.createdAt)),
+    };
+  }
   const [providers, agents, rooms] = await Promise.all([
     request(`/api/backend/workspaces/${workspaceId}/providers`, pageOf(providerReadSchema)),
     request(`/api/backend/workspaces/${workspaceId}/agents`, pageOf(agentReadSchema)),
@@ -497,7 +531,9 @@ export function subscribeRoom(
   const connect = () => {
     if (stopped) return;
     const candidate = new EventSource(
-      `/api/backend/workspaces/${workspaceId}/rooms/${roomId}/stream?cursor=${encodeURIComponent(currentCursor)}`,
+      scopedResourcePath(
+        `/api/backend/workspaces/${workspaceId}/rooms/${roomId}/stream?cursor=${encodeURIComponent(currentCursor)}`,
+      ),
     );
     source = candidate;
     candidate.addEventListener('session.expired', () => {
@@ -742,7 +778,9 @@ export async function uploadRoomDocument(workspaceId: string, roomId: string, fi
   const form = new FormData();
   form.set('file', file);
   const response = await fetch(
-    `/api/backend/workspaces/${workspaceId}/rooms/${roomId}/resources/documents`,
+    scopedResourcePath(
+      `/api/backend/workspaces/${workspaceId}/rooms/${roomId}/resources/documents`,
+    ),
     { method: 'POST', body: form },
   );
   const data = await response.json();

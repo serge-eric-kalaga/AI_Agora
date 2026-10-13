@@ -44,8 +44,17 @@ def _read(workspace: Workspace, role: WorkspaceRole | None = None) -> WorkspaceR
     )
 
 
-@router.get("", response_model=Page[WorkspaceRead], summary="Lister mes espaces de travail")
+@router.get(
+    "",
+    response_model=Page[WorkspaceRead],
+    summary="Lister les espaces accessibles",
+    description="Retourne les espaces du membre, ou tous les espaces pour un superadmin. Le privilège est vérifié en base à chaque requête.",
+)
 def list_workspaces(db: DbSession, current_user: CurrentUser) -> Page[WorkspaceRead]:
+    if current_user.is_superadmin:
+        # Le superadmin explore tous les espaces depuis les parcours habituels.
+        workspaces = db.scalars(select(Workspace).order_by(Workspace.created_at)).all()
+        return Page(items=[_read(workspace, WorkspaceRole.ADMIN) for workspace in workspaces])
     rows = db.execute(
         select(Workspace, WorkspaceMember.role)
         .join(WorkspaceMember, WorkspaceMember.workspace_id == Workspace.id)
@@ -119,19 +128,22 @@ def get_workspace_analytics(
             func.count(Message.id).filter(Message.author_agent_id.is_not(None)),
         )
         .join(Room, Room.id == Message.room_id)
-        .where(Room.workspace_id == workspace_id, Message.kind == MessageKind.MESSAGE)
+        .where(
+            (current_user.is_superadmin or Room.workspace_id == workspace_id),
+            Message.kind == MessageKind.MESSAGE,
+        )
     ).one()
     cloud_cost, cloud_tokens, local_tokens = db.execute(
         select(
             func.coalesce(func.sum(Room.amount_spent), 0),
             func.coalesce(func.sum(Room.cloud_tokens), 0),
             func.coalesce(func.sum(Room.local_tokens), 0),
-        ).where(Room.workspace_id == workspace_id)
+        ).where(current_user.is_superadmin or Room.workspace_id == workspace_id)
     ).one()
     active_agents = (
         db.scalar(
             select(func.count(AgentDefinition.id)).where(
-                AgentDefinition.workspace_id == workspace_id,
+                (current_user.is_superadmin or AgentDefinition.workspace_id == workspace_id),
                 AgentDefinition.is_active.is_(True),
             )
         )
@@ -142,7 +154,7 @@ def get_workspace_analytics(
             select(func.count(MessageReaction.id))
             .join(Message, Message.id == MessageReaction.message_id)
             .join(Room, Room.id == Message.room_id)
-            .where(Room.workspace_id == workspace_id)
+            .where(current_user.is_superadmin or Room.workspace_id == workspace_id)
         )
         or 0
     )
@@ -150,7 +162,7 @@ def get_workspace_analytics(
         select(Message.author_agent_id, func.count(Message.id))
         .join(Room, Room.id == Message.room_id)
         .where(
-            Room.workspace_id == workspace_id,
+            (current_user.is_superadmin or Room.workspace_id == workspace_id),
             Message.kind == MessageKind.MESSAGE,
             Message.author_agent_id.is_not(None),
         )
@@ -161,7 +173,7 @@ def get_workspace_analytics(
         select(ConversationEvent, Room.name)
         .join(Room, Room.id == ConversationEvent.room_id)
         .where(
-            Room.workspace_id == workspace_id,
+            (current_user.is_superadmin or Room.workspace_id == workspace_id),
             ConversationEvent.event_type.notin_(("agent.typing", "agent.idle")),
         )
         .order_by(ConversationEvent.created_at.desc())

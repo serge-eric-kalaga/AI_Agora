@@ -5,7 +5,7 @@ from uuid import UUID
 from sqlalchemy import select
 
 from api.database import SessionLocal
-from api.database.models import Room, User, Workspace
+from api.database.models import Room, User, Workspace, WorkspaceMember
 
 
 def test_global_read_requires_superadmin(client, account):
@@ -50,9 +50,31 @@ def test_global_read_requires_superadmin(client, account):
     rooms = client.get("/api/v1/admin/rooms", headers=headers).json()["items"]
     assert str(rid) in {r["id"] for r in rooms}
     assert client.get(f"/api/v1/admin/rooms/{rid}/messages", headers=headers).status_code == 200
-    assert client.get(f"/api/v1/workspaces/{wid}/rooms/{rid}", headers=headers).status_code == 404
+    # Les mêmes routes servent la vue globale et les conversations en direct.
+    spaces = client.get("/api/v1/workspaces", headers=headers).json()["items"]
+    assert str(wid) in {space["id"] for space in spaces}
+    for suffix in ("", "/rooms", "/agents", "/providers", "/analytics", "/members"):
+        assert client.get(f"/api/v1/workspaces/{wid}{suffix}", headers=headers).status_code == 200
+    for suffix in ("", "/messages", "/memory", "/resources"):
+        response = client.get(f"/api/v1/workspaces/{wid}/rooms/{rid}{suffix}", headers=headers)
+        assert response.status_code == 200, response.text
+    with SessionLocal() as db:
+        assert (
+            db.scalar(
+                select(WorkspaceMember).where(
+                    WorkspaceMember.workspace_id == wid,
+                    WorkspaceMember.user_id == UUID(account["user"]["id"]),
+                )
+            )
+            is None
+        )
     with SessionLocal() as db:
         user = db.get(User, UUID(account["user"]["id"]))
         user.is_superadmin = False
         db.commit()
     assert client.get("/api/v1/admin/users", headers=headers).status_code == 403
+
+    assert client.get(f"/api/v1/workspaces/{wid}/rooms/{rid}", headers=headers).status_code == 404
+    assert str(wid) not in {
+        space["id"] for space in client.get("/api/v1/workspaces", headers=headers).json()["items"]
+    }

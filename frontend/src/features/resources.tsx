@@ -3,6 +3,7 @@ import { useCallback, useEffect, useState, type FormEvent } from 'react';
 import { useAgora } from '@/components/store';
 import { usePersistentBoolean } from '@/components/persistent-state';
 import {
+  scopedResourcePath,
   addRoomSource,
   listRoomResources,
   readRoomResource,
@@ -124,7 +125,9 @@ export function ResourcesPanel({ roomId }: { roomId: string }) {
             {activeWorkspaceId && (
               <a
                 className="button secondary"
-                href={`/api/backend/workspaces/${activeWorkspaceId}/rooms/${roomId}/resources/${resource.id}/download`}
+                href={scopedResourcePath(
+                  `/api/backend/workspaces/${activeWorkspaceId}/rooms/${roomId}/resources/${resource.id}/download`,
+                )}
               >
                 {t.resources.download}
               </a>

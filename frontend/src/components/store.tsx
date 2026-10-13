@@ -170,7 +170,7 @@ export function AgoraProvider({ children }: { children: ReactNode }) {
   const [storageWarning, setStorageWarning] = useState('');
   const [toast, notify] = useState('');
 
-  const loadAccount = useCallback(async () => {
+  const loadAccount = useCallback(async (currentUser: AgoraUser) => {
     const available = await listWorkspaces();
     const remembered = window.localStorage.getItem(workspaceStorageKey);
     const selected = available.find((workspace) => workspace.id === remembered) ?? available[0];
@@ -181,7 +181,12 @@ export function AgoraProvider({ children }: { children: ReactNode }) {
       return;
     }
     window.localStorage.setItem(workspaceStorageKey, selected.id);
-    send({ remote: await listWorkspaceData(selected.id) });
+    send({
+      remote: await listWorkspaceData(
+        selected.id,
+        currentUser.isSuperadmin ? available : undefined,
+      ),
+    });
   }, []);
 
   useEffect(() => {
@@ -197,7 +202,7 @@ export function AgoraProvider({ children }: { children: ReactNode }) {
           const currentUser = await readSession();
           if (cancelled) return;
           setUser(currentUser);
-          if (currentUser) await loadAccount();
+          if (currentUser) await loadAccount(currentUser);
         }
       } catch (error) {
         if (!cancelled)
@@ -230,8 +235,9 @@ export function AgoraProvider({ children }: { children: ReactNode }) {
   async function establishSession(action: 'login' | 'register', payload: Record<string, string>) {
     setReady(false);
     try {
-      setUser(await authenticate(action, payload));
-      await loadAccount();
+      const currentUser = await authenticate(action, payload);
+      setUser(currentUser);
+      await loadAccount(currentUser);
     } finally {
       setReady(true);
     }
@@ -249,7 +255,7 @@ export function AgoraProvider({ children }: { children: ReactNode }) {
     if (!workspaces.some((workspace) => workspace.id === id)) return;
     setReady(false);
     try {
-      send({ remote: await listWorkspaceData(id) });
+      send({ remote: await listWorkspaceData(id, user?.isSuperadmin ? workspaces : undefined) });
       setActiveWorkspaceId(id);
       window.localStorage.setItem(workspaceStorageKey, id);
     } finally {

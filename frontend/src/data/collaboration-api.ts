@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import type { Workspace } from '@/domain/models';
 
 const memberSchema = z.object({
   userId: z.string(),
@@ -26,7 +27,10 @@ const notificationSchema = z.object({
   createdAt: z.string(),
   readAt: z.string().nullable(),
 });
-export type Member = z.infer<typeof memberSchema>;
+export type Member = z.infer<typeof memberSchema> & {
+  workspaceId?: string;
+  workspaceName?: string;
+};
 export type Invitation = z.infer<typeof invitationSchema>;
 export type Notification = z.infer<typeof notificationSchema>;
 export type CollaboratorRole = 'admin' | 'member' | 'observer';
@@ -42,7 +46,23 @@ async function call(path: string, init?: RequestInit): Promise<unknown> {
   if (!response.ok) throw new Error(body.error?.message ?? 'Action indisponible. Réessayez.');
   return body;
 }
-export async function listMembers(workspace: string) {
+export async function listMembers(
+  workspace: string,
+  globalWorkspaces?: Workspace[],
+): Promise<Member[]> {
+  if (globalWorkspaces) {
+    const groups = await Promise.all(
+      globalWorkspaces.map(async (space) => {
+        const members = await listMembers(space.id);
+        return members.map((member) => ({
+          ...member,
+          workspaceId: space.id,
+          workspaceName: space.name,
+        }));
+      }),
+    );
+    return groups.flat();
+  }
   return z.object({ items: z.array(memberSchema) }).parse(await call(`${workspace}/members`)).items;
 }
 export async function listInvitations(workspace: string) {
@@ -51,14 +71,12 @@ export async function listInvitations(workspace: string) {
     .parse(await call(`${workspace}/invitations`)).items;
 }
 export async function inviteMember(workspace: string, email: string, role: CollaboratorRole) {
-  return invitationSchema
-    .extend({ token: z.string() })
-    .parse(
-      await call(`${workspace}/invitations`, {
-        method: 'POST',
-        body: JSON.stringify({ email, role }),
-      }),
-    );
+  return invitationSchema.extend({ token: z.string() }).parse(
+    await call(`${workspace}/invitations`, {
+      method: 'POST',
+      body: JSON.stringify({ email, role }),
+    }),
+  );
 }
 export async function updateMemberRole(workspace: string, userId: string, role: CollaboratorRole) {
   return memberSchema.parse(

@@ -41,7 +41,10 @@ class UserRead(APIModel):
     email: EmailStr
     username: str
     is_active: bool
-    is_superadmin: bool = Field(default=False, description="Accès global en lecture. Ce privilège ne peut pas être attribué par inscription ou édition de profil.")
+    is_superadmin: bool = Field(
+        default=False,
+        description="Accès global aux espaces et aux parcours habituels. Ce privilège ne peut pas être attribué par inscription ou édition de profil.",
+    )
     created_at: datetime
 
 

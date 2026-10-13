@@ -9,7 +9,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from api.database import get_db
-from api.database.models import User, WorkspaceMember, WorkspaceRole
+from api.database.models import User, Workspace, WorkspaceMember, WorkspaceRole
 from api.errors import DomainError, NotFoundError
 from api.security import decode_access_token
 
@@ -34,6 +34,16 @@ def require_workspace_member(db: Session, workspace_id: UUID, user: User) -> Wor
             WorkspaceMember.user_id == user.id,
         )
     )
+    if user.is_superadmin and (not member or member.role != WorkspaceRole.OWNER):
+        # Le privilège est relu en base à chaque requête ; aucun membre fictif n'est persisté.
+        workspace = db.get(Workspace, workspace_id)
+        if workspace:
+            return WorkspaceMember(
+                workspace_id=workspace_id,
+                user_id=user.id,
+                role=WorkspaceRole.ADMIN,
+                workspace=workspace,
+            )
     if not member:
         raise NotFoundError("workspace_not_found", "L'espace de travail est introuvable.")
     return member

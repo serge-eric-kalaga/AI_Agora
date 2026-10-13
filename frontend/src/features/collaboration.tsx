@@ -20,7 +20,7 @@ import {
 import { t } from '@/i18n';
 
 export function Collaborators() {
-  const { activeWorkspaceId, workspaces, notify } = useAgora();
+  const { activeWorkspaceId, workspaces, user, notify } = useAgora();
   const [members, setMembers] = useState<Member[]>([]);
   const [invitations, setInvitations] = useState<Invitation[]>([]);
   const [email, setEmail] = useState('');
@@ -41,7 +41,7 @@ export function Collaborators() {
     let cancelled = false;
     if (!activeWorkspaceId) return;
     Promise.all([
-      listMembers(activeWorkspaceId),
+      listMembers(activeWorkspaceId, user?.isSuperadmin ? workspaces : undefined),
       admin ? listInvitations(activeWorkspaceId) : Promise.resolve([]),
     ])
       .then(([people, invites]) => {
@@ -57,7 +57,7 @@ export function Collaborators() {
     return () => {
       cancelled = true;
     };
-  }, [activeWorkspaceId, admin]);
+  }, [activeWorkspaceId, admin, user?.isSuperadmin, workspaces]);
   async function run(action: () => Promise<void>) {
     setBusy(true);
     setError('');
@@ -103,10 +103,14 @@ export function Collaborators() {
         <h2>{t.collaboration.title}</h2>
         <ul>
           {members.map((member) => (
-            <li key={member.userId} className="collaborator-row">
+            <li
+              key={`${member.workspaceId ?? activeWorkspaceId}:${member.userId}`}
+              className="collaborator-row"
+            >
               <div>
                 <strong>{member.username}</strong>
                 <p>{member.email}</p>
+                {member.workspaceName && <small>{member.workspaceName}</small>}
               </div>
               <span>{t.collaboration.roles[member.role]}</span>
               {admin &&
@@ -120,12 +124,16 @@ export function Collaborators() {
                       const next = event.target.value as CollaboratorRole;
                       void run(async () => {
                         const saved = await updateMemberRole(
-                          activeWorkspaceId!,
+                          member.workspaceId ?? activeWorkspaceId!,
                           member.userId,
                           next,
                         );
                         setMembers((previous) =>
-                          previous.map((m) => (m.userId === saved.userId ? saved : m)),
+                          previous.map((m) =>
+                            m.userId === saved.userId && m.workspaceId === member.workspaceId
+                              ? { ...m, ...saved }
+                              : m,
+                          ),
                         );
                       });
                     }}

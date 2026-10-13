@@ -3,6 +3,7 @@ export const fr = {
   appName: 'AI Agora',
   beta: 'BÊTA',
   workspaceCaption: 'ESPACE DE TRAVAIL',
+  globalWorkspaceCaption: 'TOUS LES LABORATOIRES',
   workspace: 'Mon laboratoire',
   workspaceDetail: 'Espace personnel',
   demo: 'Mode démonstration',
