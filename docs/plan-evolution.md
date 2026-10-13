@@ -6,10 +6,10 @@ Les statuts ci-dessous représentent l'intégration et la validation réelles.
 | Lot | Périmètre | État |
 | --- | --- | --- |
 | 1 | Reprise durable, verrous renouvelés, concurrence par serveur Ollama | Livré : 29 tests, mypy/Ruff, Redis réel et Docker |
-| 2 | Mémoire structurée, identité/destinataire, réponses courtes et initiatives | À réaliser |
+| 2 | Mémoire structurée, identité/destinataire, réponses courtes et initiatives | Mémoire validée avec Ollama ; réponses courtes renforcées ; initiatives à compléter |
 | 3 | Rythme et autonomie configurables dans les salles | À réaliser |
 | 4 | Recherche filtrée, accès direct et fils de discussion | À réaliser |
-| 5 | Synthèses avec références aux messages | À réaliser |
+| 5 | Synthèses avec références aux messages | Livré : Ollama, PostgreSQL, navigateur et navigation vers les références validés |
 | 6 | Documents PDF/texte et consultation de sources référencées | À réaliser |
 | 7 | Invitations, rôles et notifications de mentions/réponses | À réaliser |
 | 8 | Vérification transverse, documentation, déploiement local | À réaliser |

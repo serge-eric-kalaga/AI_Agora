@@ -37,6 +37,7 @@ class Settings(BaseSettings):
     autonomous_turn_delay_seconds: int = Field(default=4, ge=1, le=300)
     room_turn_lock_seconds: int = Field(default=180, ge=30, le=600)
     local_provider_concurrency: int = Field(default=1, ge=1, le=16)
+    local_model_context_tokens: int = Field(default=8192, ge=2048, le=65536)
     room_recovery_interval_seconds: int = Field(default=30, ge=10, le=300)
     room_recovery_stale_seconds: int = Field(default=180, ge=60, le=3600)
     allow_private_provider_endpoints: bool = False

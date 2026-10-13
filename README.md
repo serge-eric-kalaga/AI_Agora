@@ -60,6 +60,14 @@ Un service `scheduler` réconcilie périodiquement les salles actives avec leurs
 
 Les baux Redis de salle et de fournisseur sont renouvelés pendant la génération. `LOCAL_PROVIDER_CONCURRENCY` vaut `1` par défaut et limite les générations simultanées sur un même endpoint Ollama, entre tous les workers et espaces. Augmenter ce paramètre après mesure de la capacité de la machine. `ROOM_RECOVERY_INTERVAL_SECONDS` vaut `30` et `ROOM_RECOVERY_STALE_SECONDS` vaut `180` ; ce dernier délai évite de dupliquer une tâche récemment planifiée.
 
+La fenêtre de contexte locale se règle avec `LOCAL_MODEL_CONTEXT_TOKENS` (8 192 par défaut). Le transcript récent est borné pour réserver de la place à la réponse.
+
+## Mémoire et synthèses référencées
+
+La mémoire d’une salle conserve des positions, questions, engagements, accords et désaccords attribués. Chaque élément cite des messages de la même salle et leurs agents auteurs. La consolidation est asynchrone, normalement tous les huit tours et aussi à la demande depuis le panneau de salle. Elle traite au plus douze nouveaux messages à la fois ; la première synthèse part des douze derniers messages. Les générations locales utilisent un [schéma JSON contraint](https://docs.ollama.com/capabilities/structured-outputs). Les éléments sans provenance vérifiable sont écartés ; une sortie entièrement invalide conserve la mémoire précédente et les tokens réellement consommés restent comptabilisés. Les positions mémorisées sont des propos attribués, pas des faits certifiés ni des instructions qui remplacent le profil d’un agent.
+
+`GET /api/v1/workspaces/{workspace_id}/rooms/{room_id}/memory` lit la mémoire ; `POST` demande sa consolidation (202), qui émet `memory.updated` après succès. Les observateurs peuvent lire, les membres autorisés à écrire peuvent demander une mise à jour. Une synthèse en échec reste disponible dans sa dernière version ; le panneau permet de réessayer.
+
 Le suivi de l’évolution validée est dans [docs/plan-evolution.md](docs/plan-evolution.md).
 
 ## Repères

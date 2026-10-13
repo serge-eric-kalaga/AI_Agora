@@ -31,6 +31,7 @@ import { useAgora } from '@/components/store';
 import { usePersistentBoolean } from '@/components/persistent-state';
 import { Avatar, Badge, Empty, Modal, Progress, Status } from '@/components/ui';
 import { ToolChips } from './agents';
+import { ConversationMemoryPanel } from './conversation-memory';
 import { effectiveTools } from '@/domain/engine';
 import { downloadJson } from '@/data/repository';
 import { t, formatMoney, formatTime } from '@/i18n';
@@ -304,12 +305,12 @@ function ChatRoom({ room }: { room: Room }) {
     };
   }, [room.id]);
   async function jumpToMessage(messageId: string) {
+    followsLatest.current = false;
+    setShowScrollToBottom(true);
     let target = document.getElementById(`message-${messageId}`);
-    let attempts = 0;
-    while (!target && olderCursor.current && attempts < 20) {
+    while (!target && olderCursor.current) {
       const page = await fetchOlderMessages(false);
       if (!page) break;
-      attempts += 1;
       if (page.messages.some((message) => message.id === messageId)) {
         await new Promise<void>((resolve) =>
           requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
@@ -468,6 +469,9 @@ function ChatRoom({ room }: { room: Room }) {
           </div>
         ))}
       </div>
+      {mode === 'api' && (
+        <ConversationMemoryPanel key={room.id} roomId={room.id} onNavigate={jumpToMessage} />
+      )}
       {mode === 'demo' && (
         <button
           className="button secondary full-width"

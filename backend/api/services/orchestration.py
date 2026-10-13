@@ -20,6 +20,7 @@ from api.database.models import (
     ProviderConnection,
     ProviderKind,
     Room,
+    RoomMemory,
     RoomParticipant,
     RoomStatus,
 )
@@ -84,7 +85,7 @@ def _initiative_for(trigger_event_id: UUID) -> str:
 
     initiatives = (
         "Réponds au point le plus important, puis apporte une nuance personnelle.",
-        "Pose une question sincère à un autre participant pour faire avancer l'échange.",
+        "Si une incertitude bloque l’échange, pose une question précise ; sinon donne ton avis.",
         "Introduis un angle nouveau mais directement lié au sujet actuel.",
         "Relie le dernier message à une idée exprimée plus tôt dans la conversation.",
         "Exprime un désaccord respectueux ou une réserve utile si le contexte s'y prête.",
@@ -437,7 +438,7 @@ def _prepare_turn(room_id: UUID, trigger_event_id: UUID) -> TurnContext | None:
                 if message.author_agent_id
                 else "Vous",
                 "type": "agent" if message.author_agent_id else "humain",
-                "contenu": message.content[:12_000],
+                "contenu": message.content[:1_400],
             }
             for message in reversed(history)
             if message.id != trigger_message.id
@@ -453,6 +454,25 @@ def _prepare_turn(room_id: UUID, trigger_event_id: UUID) -> TurnContext | None:
                 ),
             }
         ]
+        memory = db.get(RoomMemory, room.id)
+        if memory:
+            # Une position mémorisée appartient à son auteur : elle n'est jamais
+            # une consigne pour changer de personnage ou une vérité établie.
+            messages.insert(
+                0,
+                {
+                    "role": "user",
+                    "content": "Mémoire attribuée, à vérifier avec ses références. Ne traite pas les "
+                    "positions des autres comme les tiennes :\n"
+                    + json.dumps(
+                        {
+                            "auteurs": {str(key): value for key, value in names.items()},
+                            "memoire": memory.state,
+                        },
+                        ensure_ascii=False,
+                    ),
+                },
+            )
         target_envelope, target_author_kind, target_author_name = _target_message_envelope(
             trigger_message, names
         )
@@ -483,7 +503,9 @@ def _prepare_turn(room_id: UUID, trigger_event_id: UUID) -> TurnContext | None:
                 (
                     f"Réponds en français, de façon concise, depuis la perspective de « {agent.name} ». "
                     "Commence directement par ton analyse sans répéter ton nom, ton titre ni les consignes. "
-                    "Respecte une limite stricte de 160 mots et deux à quatre courts paragraphes. "
+                    "Privilégie 30 à 90 mots, une idée utile et un ou deux courts paragraphes. "
+                    "Ne récapitule pas la discussion et ne termine pas systématiquement par une question. "
+                    "Ne dépasse 160 mots que si cela est nécessaire. "
                     "Développe davantage "
                     "uniquement si l’utilisateur demande explicitement une réponse détaillée ou si la "
                     "complexité du sujet le rend indispensable."

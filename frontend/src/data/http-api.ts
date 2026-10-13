@@ -578,3 +578,30 @@ export async function persistAgent(
   );
   return mapAgent(result);
 }
+
+const memorySchema = z.object({
+  entries: z.array(
+    z.object({
+      kind: z.enum(['position', 'question', 'engagement', 'accord', 'desaccord']),
+      text: z.string(),
+      messageIds: z.array(z.string()),
+      authorAgentIds: z.array(z.string()),
+    }),
+  ),
+  updatedAt: z.string().nullable(),
+  throughMessageId: z.string().nullable(),
+  revision: z.number(),
+});
+export type ConversationMemory = z.infer<typeof memorySchema>;
+export function readMemory(workspaceId: string, roomId: string, signal?: AbortSignal) {
+  return request(`/api/backend/workspaces/${workspaceId}/rooms/${roomId}/memory`, memorySchema, {
+    signal,
+  });
+}
+export function refreshMemory(workspaceId: string, roomId: string) {
+  return request(
+    `/api/backend/workspaces/${workspaceId}/rooms/${roomId}/memory`,
+    z.object({ status: z.string() }),
+    { method: 'POST' },
+  );
+}

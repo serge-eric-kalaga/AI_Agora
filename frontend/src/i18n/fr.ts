@@ -411,6 +411,22 @@ export const fr = {
       'reaction.updated': 'Réaction mise à jour',
     },
   },
+  memory: {
+    title: 'Mémoire de la discussion',
+    empty: 'Aucune synthèse disponible pour le moment.',
+    refresh: 'Actualiser la synthèse',
+    pending: 'Synthèse demandée',
+    loading: 'Chargement…',
+    source: 'Voir le message',
+    unchanged: 'La synthèse n’a pas encore été actualisée. Vous pouvez réessayer.',
+    kinds: {
+      position: 'Position',
+      question: 'Question ouverte',
+      engagement: 'Engagement',
+      accord: 'Accord',
+      desaccord: 'Désaccord',
+    },
+  },
   errors: {
     title: 'Un imprévu est survenu',
     hint: 'Vos données enregistrées restent sur cet appareil.',

@@ -23,6 +23,7 @@ from api.database.models import (
     Message,
     MessageReaction,
     Room,
+    RoomMemory,
     RoomParticipant,
     RoomStatus,
     User,
@@ -35,6 +36,7 @@ from api.dependencies import (
 )
 from api.errors import ConflictError, DomainError, NotFoundError
 from api.schemas.common import Page
+from api.schemas.memory import MemoryRead
 from api.schemas.rooms import (
     EventRead,
     MessageCreate,
@@ -673,3 +675,60 @@ async def stream_events(
             "X-Accel-Buffering": "no",
         },
     )
+
+
+@router.get(
+    "/{room_id}/memory",
+    response_model=MemoryRead,
+    summary="Lire la mémoire et la synthèse référencée d’une salle",
+    description="Retourne positions, questions ouvertes, engagements, accords et désaccords avec leurs messages sources. "
+    "Accessible aux membres, y compris observateurs. Une liste vide signifie qu’aucune synthèse vérifiée n’est encore disponible.",
+)
+def get_memory(
+    workspace_id: UUID, room_id: UUID, db: DbSession, current_user: CurrentUser
+) -> MemoryRead:
+    require_workspace_member(db, workspace_id, current_user)
+    _room(db, workspace_id, room_id)
+    memory = db.get(RoomMemory, room_id)
+    if not memory:
+        return MemoryRead()
+    return MemoryRead(
+        **memory.state,
+        updated_at=memory.updated_at,
+        through_message_id=memory.through_message_id,
+        revision=memory.revision,
+    )
+
+
+@router.post(
+    "/{room_id}/memory",
+    status_code=202,
+    response_model=dict[str, str],
+    summary="Demander une synthèse vérifiable en arrière-plan",
+    description="Réservé aux membres qui peuvent écrire. Met en file la consolidation des nouveaux messages par le modèle d’un participant. "
+    "La mémoire précédente reste disponible pendant le calcul. Le résultat est annoncé par l’événement memory.updated ; "
+    "une sortie non vérifiable ne remplace jamais la mémoire existante.",
+)
+def request_memory(
+    workspace_id: UUID, room_id: UUID, db: DbSession, current_user: CurrentUser
+) -> dict[str, str]:
+    require_workspace_editor(db, workspace_id, current_user)
+    _room(db, workspace_id, room_id)
+    from api.tasks import refresh_room_memory
+
+    try:
+        refresh_room_memory.delay(str(room_id), force=True)
+    except (OperationalError, RedisError) as exc:
+        raise DomainError(
+            "queue_unavailable", "La synthèse ne peut pas être planifiée pour le moment.", 503
+        ) from exc
+    record_audit(
+        db,
+        workspace_id=workspace_id,
+        actor_user_id=current_user.id,
+        action="room.memory.requested",
+        resource_type="room",
+        resource_id=room_id,
+    )
+    db.commit()
+    return {"status": "queued"}

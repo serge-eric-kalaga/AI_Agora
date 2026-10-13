@@ -186,7 +186,9 @@ class Room(Base, TimestampMixin):
     topic: Mapped[str] = mapped_column(Text)
     language: Mapped[str] = mapped_column(String(10), default="fr")
     mode: Mapped[RoomMode] = mapped_column(Enum(RoomMode), default=RoomMode.DEBATE)
-    temporal_mode: Mapped[TemporalMode] = mapped_column(Enum(TemporalMode), default=TemporalMode.LIVE)
+    temporal_mode: Mapped[TemporalMode] = mapped_column(
+        Enum(TemporalMode), default=TemporalMode.LIVE
+    )
     visibility: Mapped[RoomVisibility] = mapped_column(
         Enum(RoomVisibility), default=RoomVisibility.PRIVATE
     )
@@ -215,7 +217,9 @@ class RoomParticipant(Base, TimestampMixin):
     __table_args__ = (UniqueConstraint("room_id", "agent_id"),)
 
     id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
-    room_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("rooms.id", ondelete="CASCADE"), index=True)
+    room_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("rooms.id", ondelete="CASCADE"), index=True
+    )
     agent_id: Mapped[uuid.UUID] = mapped_column(
         ForeignKey("agent_definitions.id", ondelete="RESTRICT"), index=True
     )
@@ -234,7 +238,9 @@ class Message(Base, TimestampMixin):
     )
 
     id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
-    room_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("rooms.id", ondelete="CASCADE"), index=True)
+    room_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("rooms.id", ondelete="CASCADE"), index=True
+    )
     author_user_id: Mapped[uuid.UUID | None] = mapped_column(
         ForeignKey("users.id", ondelete="SET NULL"), nullable=True
     )
@@ -252,6 +258,21 @@ class Message(Base, TimestampMixin):
     reactions: Mapped[list[MessageReaction]] = relationship(
         back_populates="message", cascade="all, delete-orphan"
     )
+
+
+class RoomMemory(Base, TimestampMixin):
+    """Synthèse bornée, indépendante du transcript et vérifiable par ses références."""
+
+    __tablename__ = "room_memories"
+
+    room_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("rooms.id", ondelete="CASCADE"), primary_key=True
+    )
+    state: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+    through_message_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("messages.id", ondelete="SET NULL"), nullable=True
+    )
+    revision: Mapped[int] = mapped_column(Integer, default=1)
 
 
 class MessageReaction(Base, TimestampMixin):
@@ -289,7 +310,9 @@ class ConversationEvent(Base):
     )
 
     id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
-    room_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("rooms.id", ondelete="CASCADE"), index=True)
+    room_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("rooms.id", ondelete="CASCADE"), index=True
+    )
     sequence: Mapped[int] = mapped_column(Integer)
     event_type: Mapped[str] = mapped_column(String(80), index=True)
     actor_user_id: Mapped[uuid.UUID | None] = mapped_column(

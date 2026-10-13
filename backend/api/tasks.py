@@ -15,6 +15,7 @@ from api.celery_app import celery_app
 from api.configs import get_settings
 from api.database import SessionLocal
 from api.database.models import ConversationEvent, Room, RoomStatus
+from api.services.conversation_memory import refresh_memory
 from api.services.generation_capacity import LocalProviderBusy, renewed_lease
 from api.services.model_clients import ModelProviderError
 from api.services.orchestration import execute_room_turn, record_room_failure
@@ -96,6 +97,8 @@ def continue_room_turn(self, room_id: str, trigger_event_id: str) -> dict[str, s
         if exc.retryable and self.request.retries < 3:
             raise self.retry(exc=exc, countdown=2 ** (self.request.retries + 1)) from exc
         return record_room_failure(room_uuid, event_uuid, exc.code)
+    if result.get("status") == "completed" and int(result.get("chainDepth", "0")) % 8 == 0:
+        refresh_room_memory.delay(room_id)
     if result.get("status") in {"completed", "already_completed"}:
         next_event_id = result.get("eventId")
         if next_event_id:
@@ -164,3 +167,30 @@ def recover_active_rooms() -> dict[str, int]:
     finally:
         client.close()
     return {"scheduled": scheduled}
+
+
+@celery_app.task(bind=True, max_retries=None)
+def refresh_room_memory(self, room_id: str, force: bool = False) -> dict[str, str]:  # type: ignore[no-untyped-def]
+    """Consolide la mémoire hors du chemin de publication d'un message."""
+
+    settings = get_settings()
+    client = Redis.from_url(settings.redis_url)
+    lock = client.lock(
+        f"ai-agora:room:{room_id}:turn", timeout=settings.room_turn_lock_seconds, thread_local=False
+    )
+    try:
+        if not lock.acquire(blocking=False):
+            raise self.retry(countdown=10)
+        with renewed_lease(lock, settings.room_turn_lock_seconds):
+            return refresh_memory(UUID(room_id), force=force)
+    except LocalProviderBusy as exc:
+        raise self.retry(exc=exc, countdown=10) from exc
+    except ModelProviderError as exc:
+        if exc.retryable and self.request.retries < 3:
+            raise self.retry(exc=exc, countdown=15) from exc
+        logger.warning(
+            "La mémoire a conservé sa version précédente room_id=%s code=%s", room_id, exc.code
+        )
+        return {"status": "failed"}
+    finally:
+        client.close()

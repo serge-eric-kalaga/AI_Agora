@@ -268,7 +268,12 @@ def test_ollama_request_disables_hidden_reasoning(monkeypatch) -> None:
 
     result = generate_model_response(
         provider,
-        ModelRequest("qwen3.5:4b", "Réponds brièvement.", [{"role": "user", "content": "Test"}]),
+        ModelRequest(
+            "qwen3.5:4b",
+            "Réponds brièvement.",
+            [{"role": "user", "content": "Test"}],
+            output_schema={"type": "object"},
+        ),
     )
 
     assert result.content == "Réponse locale"
@@ -276,6 +281,8 @@ def test_ollama_request_disables_hidden_reasoning(monkeypatch) -> None:
     payload = captured["json"]
     assert isinstance(payload, dict)
     assert payload["think"] is False
+    assert payload["format"] == {"type": "object"}
+    assert payload["options"]["num_ctx"] == 8192
 
 
 def test_human_is_not_addressed_as_an_agent() -> None:

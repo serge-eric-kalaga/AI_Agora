@@ -5,6 +5,7 @@ from typing import Any
 
 import httpx
 
+from api.configs import get_settings
 from api.database.models import ProviderConnection, ProviderKind
 from api.security import decrypt_secret
 
@@ -14,7 +15,9 @@ from .providers import _validate_destination
 class ModelProviderError(RuntimeError):
     """Erreur transitoire ou réponse invalide d'un fournisseur IA."""
 
-    def __init__(self, message: str, *, code: str = "provider_error", retryable: bool = True) -> None:
+    def __init__(
+        self, message: str, *, code: str = "provider_error", retryable: bool = True
+    ) -> None:
         super().__init__(message)
         self.code = code
         self.retryable = retryable
@@ -27,6 +30,7 @@ class ModelRequest:
     messages: list[dict[str, str]]
     temperature: float = 0.7
     max_tokens: int = 1024
+    output_schema: dict[str, Any] | None = None
 
 
 @dataclass(frozen=True)
@@ -54,7 +58,9 @@ def _post(provider: ProviderConnection, path: str, payload: dict[str, Any]) -> d
         headers["authorization"] = f"Bearer {decrypt_secret(provider.encrypted_api_key)}"
     try:
         with httpx.Client(timeout=90, follow_redirects=False) as client:
-            response = client.post(f"{provider.base_url.rstrip('/')}{path}", headers=headers, json=payload)
+            response = client.post(
+                f"{provider.base_url.rstrip('/')}{path}", headers=headers, json=payload
+            )
         response.raise_for_status()
         body = response.json()
     except httpx.HTTPStatusError as exc:
@@ -93,11 +99,13 @@ def generate_model_response(provider: ProviderConnection, request: ModelRequest)
                 "model": request.model,
                 "messages": messages,
                 "stream": False,
+                **({"format": request.output_schema} if request.output_schema else {}),
                 # Les modèles à raisonnement peuvent sinon consommer toute la limite sans réponse visible.
                 "think": False,
                 "options": {
                     "temperature": request.temperature,
                     "num_predict": request.max_tokens,
+                    "num_ctx": get_settings().local_model_context_tokens,
                 },
             },
         )
