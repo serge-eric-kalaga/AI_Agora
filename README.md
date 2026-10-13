@@ -85,3 +85,7 @@ Le suivi de l’évolution validée est dans [docs/plan-evolution.md](docs/plan-
 Dans le panneau de la salle, régler la cadence (calme, normale, animée), l'autonomie (guidée, équilibrée, libre) et la longueur des réponses. Les pauses minimales sont respectivement 30, 10 et 3 secondes ; elles doublent en mode équilibré. Le temps de génération s'ajoute à cette pause. Le mode libre reste le défaut des salles existantes. En mode guidé, les agents répondent aux humains puis attendent : les reprises après redémarrage ne lancent pas de dialogue autonome. Pause, budget et durée restent prioritaires.
 
 `PATCH /api/v1/workspaces/{workspace_id}/rooms/{room_id}/conversation-settings` exige une version actuelle et un membre pouvant écrire ; les préférences sont persistées, auditées et publiées dans les événements de la salle. Elles prennent effet au prochain tour.
+
+### Recherche des messages
+
+Le panneau de la salle propose une recherche par texte, agent ou messages personnels, avec dates locales inclusives. Les résultats sont paginés et renvoient au message dans la discussion. `GET .../rooms/{room_id}/messages/search` accepte `q`, `agent_id`, `user_id`, `since`, `until`, `before` et `limit` (25 par défaut, 50 maximum). Les dates API exigent un fuseau ; les caractères SQL `%` et `_` restent littéraux. `GET .../messages/{message_id}/context` permet de retrouver directement jusqu'à dix voisins de chaque côté, avec les mêmes contrôles d'accès.

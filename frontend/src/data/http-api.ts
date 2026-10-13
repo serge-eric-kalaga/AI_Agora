@@ -625,3 +625,25 @@ export async function updateConversationSettings(
     ),
   );
 }
+
+export async function searchRoomMessages(
+  workspaceId: string,
+  roomId: string,
+  filters: Record<string, string>,
+  signal?: AbortSignal,
+) {
+  const query = new URLSearchParams(Object.entries(filters).filter(([, value]) => value));
+  const page = await request(
+    `/api/backend/workspaces/${workspaceId}/rooms/${roomId}/messages/search?${query}`,
+    pageOf(messageReadSchema),
+    { signal },
+  );
+  return { messages: page.items.map(mapMessage), nextCursor: page.nextCursor };
+}
+export async function readMessageContext(workspaceId: string, roomId: string, messageId: string) {
+  const page = await request(
+    `/api/backend/workspaces/${workspaceId}/rooms/${roomId}/messages/${messageId}/context`,
+    pageOf(messageReadSchema),
+  );
+  return page.items.map(mapMessage);
+}

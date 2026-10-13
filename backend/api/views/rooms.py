@@ -783,3 +783,114 @@ def update_conversation_settings(
     )
     db.commit()
     return _room_read(room)
+
+
+@router.get(
+    "/{room_id}/messages/search",
+    response_model=Page[MessageRead],
+    summary="Rechercher des messages dans une salle",
+    description="Recherche littérale insensible à la casse, filtrée par auteur agent ou humain et intervalle inclusif en UTC. Pagination stable par date puis identifiant, du plus récent au plus ancien. Le curseur doit appartenir à la salle. Tous les filtres sont cumulatifs ; aucun message d'un autre espace n'est accessible.",
+)
+def search_messages(
+    workspace_id: UUID,
+    room_id: UUID,
+    db: DbSession,
+    current_user: CurrentUser,
+    q: str = Query(
+        default="", max_length=300, description="Texte littéral ; % et _ ne sont pas des jokers."
+    ),
+    agent_id: UUID | None = Query(default=None, description="Auteur agent."),
+    user_id: UUID | None = Query(default=None, description="Auteur humain."),
+    since: datetime | None = Query(
+        default=None, description="Début inclusif, date avec fuseau obligatoire."
+    ),
+    until: datetime | None = Query(
+        default=None, description="Fin inclusive, date avec fuseau obligatoire."
+    ),
+    before: UUID | None = Query(default=None, description="Curseur de la page précédente."),
+    limit: int = Query(default=25, ge=1, le=50),
+) -> Page[MessageRead]:
+    require_workspace_member(db, workspace_id, current_user)
+    _room(db, workspace_id, room_id)
+    if any(value and value.tzinfo is None for value in (since, until)) or (
+        since and until and since > until
+    ):
+        raise DomainError(
+            "invalid_date_range", "Indiquez un intervalle valide avec un fuseau horaire.", 422
+        )
+    query = select(Message).where(Message.room_id == room_id)
+    if q.strip():
+        escaped = q.strip().replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+        query = query.where(Message.content.ilike(f"%{escaped}%", escape="\\"))
+    if agent_id:
+        query = query.where(Message.author_agent_id == agent_id)
+    if user_id:
+        query = query.where(Message.author_user_id == user_id)
+    if since:
+        query = query.where(Message.created_at >= since)
+    if until:
+        query = query.where(Message.created_at <= until)
+    if before:
+        cursor = db.get(Message, before)
+        if not cursor or cursor.room_id != room_id:
+            raise DomainError(
+                "invalid_message_cursor", "Le curseur appartient à une autre salle.", 422
+            )
+        query = query.where(
+            or_(
+                Message.created_at < cursor.created_at,
+                and_(Message.created_at == cursor.created_at, Message.id < cursor.id),
+            )
+        )
+    rows = db.scalars(
+        query.order_by(Message.created_at.desc(), Message.id.desc()).limit(limit + 1)
+    ).all()
+    selected = rows[:limit]
+    return Page(
+        items=[_message_read(db, row, current_user.id) for row in selected],
+        next_cursor=str(selected[-1].id) if len(rows) > limit else None,
+    )
+
+
+@router.get(
+    "/{room_id}/messages/{message_id}/context",
+    response_model=Page[MessageRead],
+    summary="Retrouver un message et son contexte immédiat",
+    description="Charge directement le message demandé avec au plus dix voisins avant et après, dans l'ordre chronologique. Ne nécessite pas de parcourir toutes les pages d'historique. Les contrôles d'espace et de salle s'appliquent à la cible et à ses voisins.",
+)
+def message_context(
+    workspace_id: UUID, room_id: UUID, message_id: UUID, db: DbSession, current_user: CurrentUser
+) -> Page[MessageRead]:
+    require_workspace_member(db, workspace_id, current_user)
+    _room(db, workspace_id, room_id)
+    target = db.get(Message, message_id)
+    if not target or target.room_id != room_id:
+        raise NotFoundError("message_not_found", "Le message est introuvable dans cette salle.")
+    query = select(Message).where(Message.room_id == room_id)
+    earlier = list(
+        reversed(
+            db.scalars(
+                query.where(
+                    or_(
+                        Message.created_at < target.created_at,
+                        and_(Message.created_at == target.created_at, Message.id < target.id),
+                    )
+                )
+                .order_by(Message.created_at.desc(), Message.id.desc())
+                .limit(10)
+            ).all()
+        )
+    )
+    later = db.scalars(
+        query.where(
+            or_(
+                Message.created_at > target.created_at,
+                and_(Message.created_at == target.created_at, Message.id > target.id),
+            )
+        )
+        .order_by(Message.created_at, Message.id)
+        .limit(10)
+    ).all()
+    return Page(
+        items=[_message_read(db, row, current_user.id) for row in [*earlier, target, *later]]
+    )

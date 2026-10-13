@@ -33,6 +33,7 @@ import { Avatar, Badge, Empty, Modal, Progress, Status } from '@/components/ui';
 import { ToolChips } from './agents';
 import { ConversationMemoryPanel } from './conversation-memory';
 import { ConversationSettingsPanel } from './conversation-settings';
+import { MessageSearchPanel } from './message-search';
 import { effectiveTools } from '@/domain/engine';
 import { downloadJson } from '@/data/repository';
 import { t, formatMoney, formatTime } from '@/i18n';
@@ -472,6 +473,7 @@ function ChatRoom({ room }: { room: Room }) {
       </div>
       {mode === 'api' && (
         <>
+          <MessageSearchPanel key={`search:${room.id}`} room={room} onNavigate={jumpToMessage} />
           <ConversationSettingsPanel key={`${room.id}:${room.version}`} room={room} />
           <ConversationMemoryPanel key={room.id} roomId={room.id} onNavigate={jumpToMessage} />
         </>
