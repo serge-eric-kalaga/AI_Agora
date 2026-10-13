@@ -1,11 +1,11 @@
 'use client';
 import { useEffect, useMemo, useState } from 'react';
-import { Activity, Download, ChartNoAxesCombined, Bot, Coins, MessagesSquare } from 'lucide-react';
+import { Download, ChartNoAxesCombined, Bot, Coins, MessagesSquare } from 'lucide-react';
 import { Avatar, PageHeading, Progress, SectionHeading, Empty } from '@/components/ui';
 import { useAgora } from '@/components/store';
 import { readWorkspaceAnalytics, type WorkspaceAnalytics } from '@/data/http-api';
 import { downloadJson } from '@/data/repository';
-import { formatMoney, formatNumber, formatTime, t } from '@/i18n';
+import { formatMoney, formatNumber, t } from '@/i18n';
 
 export function Analytics() {
   const { state, mode, activeWorkspaceId, notify } = useAgora();
@@ -76,7 +76,6 @@ export function Analytics() {
   const contributions = state.agents
     .map((agent) => ({ agent, count: contributionCounts.get(agent.id) ?? 0 }))
     .sort((left, right) => right.count - left.count);
-  const eventLabels: Readonly<Record<string, string>> = t.analytics.eventLabels;
   const value = (number: number | undefined) =>
     loading || number === undefined ? '—' : formatNumber(number);
 
@@ -163,52 +162,6 @@ export function Analytics() {
         </div>
         {!loading && !contributions.some(({ count }) => count > 0) && (
           <Empty title={t.analytics.noMessages} />
-        )}
-        {loading && <Empty title={t.analytics.loading} />}
-      </section>
-      <section className="panel activity-panel">
-        <SectionHeading title={t.analytics.events} icon={Activity} />
-        <div className="activity-list">
-          {mode === 'api'
-            ? analytics?.recentEvents.map((event) => {
-                const agent = state.agents.find((item) => item.id === event.actorAgentId);
-                return (
-                  <div className="activity-item" key={event.id}>
-                    <span className="event-icon tone-cyan">
-                      <Activity size={15} />
-                    </span>
-                    <div>
-                      <p>
-                        {eventLabels[event.eventType] ?? t.analytics.unknownEvent}
-                        {agent ? ` · ${agent.name}` : ''}
-                      </p>
-                      <small>
-                        {event.roomName} · {new Date(event.occurredAt).toLocaleDateString(t.locale)}{' '}
-                        · {formatTime(event.occurredAt)}
-                      </small>
-                    </div>
-                  </div>
-                );
-              })
-            : state.events.map((e) => (
-                <div className="activity-item" key={e.id}>
-                  <span
-                    className={`event-icon tone-${e.tone === 'warning' ? 'amber' : e.tone === 'success' ? 'green' : 'cyan'}`}
-                  >
-                    <Activity size={15} />
-                  </span>
-                  <div>
-                    <p>{e.text}</p>
-                    <small>
-                      {new Date(e.createdAt).toLocaleDateString(t.locale)} ·{' '}
-                      {formatTime(e.createdAt)}
-                    </small>
-                  </div>
-                </div>
-              ))}
-        </div>
-        {!loading && (mode === 'api' ? !analytics?.recentEvents.length : !state.events.length) && (
-          <Empty title={t.common.empty} />
         )}
         {loading && <Empty title={t.analytics.loading} />}
       </section>
