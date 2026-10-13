@@ -2484,12 +2484,12 @@ input[type='range'] {
 
 .composer-area {
   flex-shrink: 0;
-  padding: 16px 26px 20px;
+  padding: 10px 22px 12px;
   background: var(--panel);
   border-top: 1px solid var(--border);
 }
 .composer {
-  padding: 14px 16px;
+  padding: 8px 12px;
   background: var(--panel-2);
   border: 1px solid var(--border-strong);
   border-radius: 12px;
@@ -2497,15 +2497,25 @@ input[type='range'] {
 .composer:focus-within {
   border-color: var(--accent);
 }
+/* Deux lignes suffisent ; un texte plus long défile dans le champ. */
 .composer textarea {
   background: transparent;
   color: var(--text);
+  height: 44px;
+  min-height: 44px !important;
+  padding: 2px 8px !important;
+  line-height: 20px;
 }
 .composer-bottom {
-  padding: 8px 0 0;
+  padding: 4px 0 0;
+}
+.composer .send-button {
+  min-height: 32px;
+  width: 34px;
+  height: 34px;
 }
 .composer-foot {
-  padding-top: 10px;
+  padding-top: 5px;
   color: var(--muted);
 }
 .reply-preview {
@@ -2514,7 +2524,7 @@ input[type='range'] {
 }
 @media (max-width: 760px) {
   .composer-area {
-    padding: 10px 15px 12px;
+    padding: 8px 15px 10px;
   }
   .composer {
     padding: 12px;
@@ -2657,8 +2667,8 @@ input[type='range'] {
     min-height: 34px;
   }
   .composer textarea {
-    padding: 8px 2px !important;
-    min-height: 48px !important;
+    padding: 2px 2px !important;
+    min-height: 44px !important;
   }
   .composer-foot {
     font-size: 9px;
