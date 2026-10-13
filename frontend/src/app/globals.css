@@ -3974,3 +3974,10 @@ td > svg {
 .thread-messages p {
   line-height: 1.8;
 }
+
+.resource-content {
+  max-height: 320px;
+  overflow-y: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}

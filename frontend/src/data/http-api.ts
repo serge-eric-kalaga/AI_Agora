@@ -629,6 +629,7 @@ export async function updateConversationSettings(
   workspaceId: string,
   room: Room,
   settings: ConversationSettings,
+  tools?: Room['tools'],
 ) {
   return mapRoom(
     await request(
@@ -636,7 +637,11 @@ export async function updateConversationSettings(
       roomReadSchema,
       {
         method: 'PATCH',
-        body: JSON.stringify({ ...settings, expectedVersion: room.version }),
+        body: JSON.stringify({
+          ...settings,
+          expectedVersion: room.version,
+          ...(tools ? { tools } : {}),
+        }),
       },
     ),
   );
@@ -682,4 +687,47 @@ export async function readThreadMessages(
     { signal },
   );
   return { messages: page.items.map(mapMessage), nextCursor: page.nextCursor };
+}
+
+const resourceSchema = z.object({
+  id: z.string(),
+  roomId: z.string(),
+  kind: z.enum(['document', 'source']),
+  title: z.string(),
+  url: z.string().nullable(),
+  filename: z.string().nullable(),
+  excerpt: z.string(),
+  createdAt: z.string(),
+});
+export type RoomResource = z.infer<typeof resourceSchema>;
+export function listRoomResources(workspaceId: string, roomId: string, signal?: AbortSignal) {
+  return request(
+    `/api/backend/workspaces/${workspaceId}/rooms/${roomId}/resources`,
+    pageOf(resourceSchema),
+    { signal },
+  );
+}
+export function addRoomSource(workspaceId: string, roomId: string, url: string) {
+  return request(
+    `/api/backend/workspaces/${workspaceId}/rooms/${roomId}/resources/sources`,
+    resourceSchema,
+    { method: 'POST', body: JSON.stringify({ url }) },
+  );
+}
+export function readRoomResource(workspaceId: string, roomId: string, id: string) {
+  return request(
+    `/api/backend/workspaces/${workspaceId}/rooms/${roomId}/resources/${id}`,
+    resourceSchema.extend({ content: z.string() }),
+  );
+}
+export async function uploadRoomDocument(workspaceId: string, roomId: string, file: File) {
+  const form = new FormData();
+  form.set('file', file);
+  const response = await fetch(
+    `/api/backend/workspaces/${workspaceId}/rooms/${roomId}/resources/documents`,
+    { method: 'POST', body: form },
+  );
+  const data = await response.json();
+  if (!response.ok) throw new Error(data?.error?.message ?? 'Le document n’a pas pu être importé.');
+  return resourceSchema.parse(data);
 }

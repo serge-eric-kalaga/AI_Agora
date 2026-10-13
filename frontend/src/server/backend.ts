@@ -34,6 +34,9 @@ export function publicBackendResponse(response: Response) {
     'cache-control': isEventStream ? 'no-cache, no-transform' : 'no-store',
   });
   if (isEventStream) headers.set('x-accel-buffering', 'no');
+  const disposition = response.headers.get('content-disposition');
+  if (disposition) headers.set('content-disposition', disposition);
+  headers.set('x-content-type-options', 'nosniff');
   const requestId = response.headers.get('x-request-id');
   if (requestId) headers.set('x-request-id', requestId);
   return new Response(response.body, { status: response.status, headers });

@@ -10,7 +10,7 @@ Les statuts ci-dessous représentent l'intégration et la validation réelles.
 | 3 | Rythme et autonomie configurables dans les salles | Livré : 36 tests backend, permissions/version, migration PostgreSQL et enregistrement navigateur |
 | 4 | Recherche filtrée, accès direct et fils de discussion | Livré : recherche, fils isolés, reprise par fil ; 38 tests, migration et réponses Ollama/navigation navigateur validées |
 | 5 | Synthèses avec références aux messages | Livré : Ollama, PostgreSQL, navigateur et navigation vers les références validés |
-| 6 | Documents PDF/texte et consultation de sources référencées | À réaliser |
+| 6 | Documents PDF/texte et consultation de sources référencées | Livré : 48 tests backend, extraction PDF, permissions, URL publiques contrôlées ; document/source/citation Ollama et téléchargement réel validés |
 | 7 | Invitations, rôles et notifications de mentions/réponses | À réaliser |
 | 8 | Vérification transverse, documentation, déploiement local | À réaliser |
 

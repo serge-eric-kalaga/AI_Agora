@@ -18,6 +18,7 @@ from api.views import (
     auth_router,
     health_router,
     providers_router,
+    resources_router,
     rooms_router,
     workspaces_router,
 )
@@ -42,6 +43,10 @@ TAGS = [
     {"name": "Fournisseurs IA", "description": "Connexions chiffrées aux modèles cloud ou locaux."},
     {"name": "Agents IA", "description": "Personas, prompts, modèles et paramètres de génération."},
     {"name": "Arènes", "description": "Participants, états, messages, réactions et événements."},
+    {
+        "name": "Documents et sources",
+        "description": "Pièces jointes, instantanés publics et provenance.",
+    },
     {"name": "Santé", "description": "Sondes Docker et diagnostic des dépendances."},
 ]
 
@@ -108,6 +113,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         providers_router,
         agents_router,
         rooms_router,
+        resources_router,
         health_router,
     ):
         app.include_router(router, prefix=config.api_v1_prefix)
@@ -123,11 +129,15 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     async def validation_error(request: Request, exc: RequestValidationError) -> JSONResponse:
         fields: dict[str, list[str]] = {}
         for error in exc.errors():
-            key = ".".join(str(item) for item in error["loc"] if item not in {"body", "query", "path"})
+            key = ".".join(
+                str(item) for item in error["loc"] if item not in {"body", "query", "path"}
+            )
             fields.setdefault(key or "request", []).append(error["msg"])
         return JSONResponse(
             status_code=422,
-            content=_error_body(request, "validation_error", "La requête contient des données invalides.", fields),
+            content=_error_body(
+                request, "validation_error", "La requête contient des données invalides.", fields
+            ),
         )
 
     @app.exception_handler(HTTPException)

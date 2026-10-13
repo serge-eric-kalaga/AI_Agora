@@ -21,6 +21,7 @@ from sqlalchemy import (
     ForeignKey,
     Index,
     Integer,
+    LargeBinary,
     Numeric,
     String,
     Text,
@@ -361,3 +362,23 @@ class AuditLog(Base):
     resource_id: Mapped[str] = mapped_column(String(100))
     details: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class RoomResource(Base, TimestampMixin):
+    """Document ou instantané de source ; la provenance reste liée à sa salle."""
+
+    __tablename__ = "room_resources"
+    __table_args__ = (UniqueConstraint("room_id", "digest"),)
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    room_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("rooms.id", ondelete="CASCADE"), index=True
+    )
+    created_by_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id", ondelete="RESTRICT"))
+    kind: Mapped[str] = mapped_column(String(20))
+    title: Mapped[str] = mapped_column(String(200))
+    url: Mapped[str | None] = mapped_column(String(2_000), nullable=True)
+    filename: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    content: Mapped[str] = mapped_column(Text)
+    original: Mapped[bytes | None] = mapped_column(LargeBinary, nullable=True)
+    digest: Mapped[str] = mapped_column(String(64))

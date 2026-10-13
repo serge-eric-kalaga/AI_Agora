@@ -95,3 +95,13 @@ Le panneau de la salle propose une recherche par texte, agent ou messages person
 Le bouton de fil sur un message ouvre une discussion parallèle. Les agents répondent dans le même fil, avec une cible et un contexte séparés de la conversation principale. La recherche couvre tous les fils et peut les ouvrir. Le budget, la durée et les préférences restent communs à la salle. Chaque fil actif est repris séparément après perte d'une tâche.
 
 Les messages portent `threadRootId` (null pour la conversation principale). `GET .../rooms/{room_id}/messages?thread_root_id={message_id}` pagine un fil ; `POST .../messages` accepte `threadRootId` et `replyToId`. La racine doit être un message principal de la même salle ; une réponse ne peut pas citer un autre fil. Les états d'écriture portent aussi le fil concerné.
+
+### Documents, sources et références
+
+Le panneau de la salle permet d'importer un PDF textuel, TXT ou Markdown (5 Mo, 100 pages et 200 000 caractères maximum) et de consulter une URL publique. Les scans sans texte et PDF chiffrés sont refusés ; aucun OCR n'est simulé ([limites d'extraction de pypdf](https://pypdf.readthedocs.io/en/stable/user/extract-text.html)). Les sources conservent un instantané daté, leur adresse finale et un texte extrait ; elles ne sont pas rafraîchies automatiquement.
+
+Autoriser `files` ou `web` dans les réglages de la salle ET dans le profil des agents concernés. Le moteur transmet au maximum trois extraits ciblés de 1 500 caractères, sans embeddings ni appel de sélection supplémentaire. Les ressources sont des données, pas des instructions. Les identifiants de citation connus sont remplacés par des liens vers les pièces jointes réelles ; les identifiants inconnus sont retirés. Cela vérifie la provenance des références, pas la vérité des opinions des agents.
+
+Les sources externes sont limitées à 1 Mo et quatre requêtes. Chaque adresse DNS et redirection doit rester publique. La connexion utilise l'IP validée avec le nom d'hôte conservé pour Host et TLS/SNI ([extension officielle HTTPCore](https://www.encode.io/httpcore/extensions/#sni_hostname)). Aucun proxy d'environnement, cookie ni contenu de conversation n'est envoyé au site consulté. Les originaux sont téléchargés en pièce jointe avec contrôle d'accès, sans affichage HTML actif.
+
+Swagger détaille `GET /resources`, `POST /resources/documents` (multipart `file`), `POST /resources/sources` (JSON `url`), `GET /resources/{id}` et `GET /resources/{id}/download`, sous chaque salle. Les imports identiques sont dédupliqués par salle.

@@ -35,6 +35,7 @@ import { ConversationMemoryPanel } from './conversation-memory';
 import { ConversationSettingsPanel } from './conversation-settings';
 import { MessageSearchPanel } from './message-search';
 import { ThreadPanel } from './threads';
+import { ResourcesPanel } from './resources';
 import { readMessageContext } from '@/data/http-api';
 import { effectiveTools } from '@/domain/engine';
 import { downloadJson } from '@/data/repository';
@@ -487,6 +488,7 @@ function ChatRoom({ room }: { room: Room }) {
       </div>
       {mode === 'api' && (
         <>
+          <ResourcesPanel key={`resources:${room.id}`} roomId={room.id} />
           <MessageSearchPanel key={`search:${room.id}`} room={room} onNavigate={jumpToMessage} />
           <ConversationSettingsPanel key={`${room.id}:${room.version}`} room={room} />
           <ConversationMemoryPanel key={room.id} roomId={room.id} onNavigate={jumpToMessage} />

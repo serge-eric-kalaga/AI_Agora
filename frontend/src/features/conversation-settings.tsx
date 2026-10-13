@@ -11,6 +11,7 @@ export function ConversationSettingsPanel({ room }: { room: Room }) {
     conversationSettingsSchema.parse(room.conversationSettings ?? {}),
   );
   const [saving, setSaving] = useState(false);
+  const [tools, setTools] = useState(room.tools);
   const editable =
     workspaces.find((workspace) => workspace.id === activeWorkspaceId)?.role !== 'viewer';
   async function save(event: FormEvent) {
@@ -18,7 +19,7 @@ export function ConversationSettingsPanel({ room }: { room: Room }) {
     if (!activeWorkspaceId || saving) return;
     setSaving(true);
     try {
-      await updateConversationSettings(activeWorkspaceId, room, settings);
+      await updateConversationSettings(activeWorkspaceId, room, settings, tools);
       await loadRoom(room.id);
       notify(t.conversationSettings.saved);
     } catch (error) {
@@ -88,6 +89,24 @@ export function ConversationSettingsPanel({ room }: { room: Room }) {
               ))}
             </select>
           </label>
+          {(['files', 'web'] as const).map((tool) => (
+            <label className="field" key={tool}>
+              <span>
+                <input
+                  type="checkbox"
+                  checked={tools.includes(tool)}
+                  onChange={(event) =>
+                    setTools((previous) =>
+                      event.target.checked
+                        ? [...previous, tool]
+                        : previous.filter((value) => value !== tool),
+                    )
+                  }
+                />
+                {t.conversationSettings.tools[tool]}
+              </span>
+            </label>
+          ))}
           <p className="muted">{t.conversationSettings.hint}</p>
           <button className="button secondary" type="submit">
             {saving ? t.conversationSettings.saving : t.conversationSettings.save}

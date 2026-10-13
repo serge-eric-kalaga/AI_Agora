@@ -806,7 +806,9 @@ def update_conversation_settings(
         raise ConflictError(
             "stale_room_version", "La salle a changé ; rechargez-la avant de réessayer."
         )
-    room.conversation_settings = payload.model_dump(exclude={"expected_version"})
+    room.conversation_settings = payload.model_dump(exclude={"expected_version", "tools"})
+    if payload.tools is not None:
+        room.tools = list(dict.fromkeys(payload.tools))
     room.version += 1
     append_room_event(
         db,

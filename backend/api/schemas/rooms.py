@@ -28,6 +28,10 @@ class ConversationSettings(APIModel):
 
 
 class ConversationSettingsUpdate(ConversationSettings):
+    tools: list[Literal["web", "files", "code"]] | None = Field(
+        default=None,
+        description="Autorisations de la salle ; les profils des agents doivent également autoriser chaque outil.",
+    )
     expected_version: int = Field(ge=1, description="Version de la salle lue avant modification.")
 
 
