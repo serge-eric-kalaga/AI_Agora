@@ -159,7 +159,7 @@ export function Agents() {
                   </span>
                   <Link href={`/fr/agents/${agent.id}`} className="button secondary small">
                     <SlidersHorizontal size={13} />
-                    {t.agents.config}
+                    {t.design.profile}
                   </Link>
                   <button
                     className="icon-button bordered"
@@ -230,6 +230,77 @@ const blank: AgentDraft = {
   temperature: 0.7,
   maxTokens: 1200,
 };
+export function AgentProfile({ id }: { id: string }) {
+  const { state } = useAgora();
+  const agent = state.agents.find((item) => item.id === id);
+  if (!agent)
+    return (
+      <div className="page">
+        <Empty title={t.editor.missing} />
+      </div>
+    );
+  const rooms = state.rooms.filter((room) => room.agentIds.includes(id));
+  return (
+    <div className="page">
+      <Link href="/fr/agents" className="back-link">
+        <ArrowLeft size={15} />
+        {t.nav.agents}
+      </Link>
+      <PageHeading
+        eyebrow={t.design.collective}
+        title={agent.name}
+        description={agent.role}
+        actions={
+          <Link href={`/fr/agents/${id}?edit=1`} className="button primary">
+            <SlidersHorizontal size={16} />
+            {t.design.editProfile}
+          </Link>
+        }
+      />
+      <div className="profile-layout">
+        <section className="panel profile-identity">
+          <Avatar agent={agent} size="lg" />
+          <h2>{agent.name}</h2>
+          <Badge tone={agent.active ? 'green' : 'neutral'}>
+            {agent.active ? t.common.active : t.common.inactive}
+          </Badge>
+          <p>{agent.description}</p>
+          <ToolChips tools={agent.tools} />
+        </section>
+        <div className="profile-details">
+          <section className="panel profile-section">
+            <h2>{t.design.agentStyle}</h2>
+            <div className="profile-traits">
+              {(Object.keys(agent.traits) as (keyof Agent['traits'])[]).map((key) => (
+                <div key={key}>
+                  <div>
+                    <span>{t.editor[key]}</span>
+                    <strong>{agent.traits[key]}%</strong>
+                  </div>
+                  <Progress label={t.editor[key]} value={agent.traits[key]} tone={agent.color} />
+                </div>
+              ))}
+            </div>
+          </section>
+          <section className="panel profile-section">
+            <h2>{t.nav.rooms}</h2>
+            {rooms.length ? (
+              rooms.map((room) => (
+                <Link className="profile-room" key={room.id} href={`/fr/rooms/${room.id}`}>
+                  <span>{room.name}</span>
+                  <ArrowRight size={16} />
+                </Link>
+              ))
+            ) : (
+              <Empty title={t.design.noRooms} />
+            )}
+          </section>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export function AgentEditor({ id }: { id?: string }) {
   const { state } = useAgora();
   const existing = state.agents.find((a) => a.id === id);

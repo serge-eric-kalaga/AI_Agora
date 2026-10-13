@@ -1,6 +1,7 @@
 'use client';
 import { useState, type FormEvent } from 'react';
 import { LockKeyhole, Orbit, ShieldCheck } from 'lucide-react';
+import { ThemeButton } from '@/components/theme';
 import { useAgora } from '@/components/store';
 import { t } from '@/i18n';
 
@@ -35,7 +36,18 @@ export default function ConnectionPage() {
 
   return (
     <main className="auth-page">
+      <section className="auth-story">
+        <div className="brand">
+          <Orbit size={30} />
+          {t.appName}
+        </div>
+        <h2>{t.design.authTitle}</h2>
+        <p>{t.design.authHint}</p>
+      </section>
       <section className="auth-card" aria-labelledby="auth-title">
+        <div className="auth-theme">
+          <ThemeButton />
+        </div>
         <div className="auth-brand">
           <span>
             <Orbit size={28} />

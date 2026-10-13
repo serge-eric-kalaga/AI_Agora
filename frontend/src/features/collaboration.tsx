@@ -2,7 +2,7 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import Link from 'next/link';
 import { useAgora } from '@/components/store';
-import { PageHeading } from '@/components/ui';
+import { Empty, Modal, PageHeading } from '@/components/ui';
 import {
   acceptInvitation,
   inviteMember,
@@ -25,6 +25,7 @@ export function Collaborators() {
   const [invitations, setInvitations] = useState<Invitation[]>([]);
   const [email, setEmail] = useState('');
   const [role, setRole] = useState<CollaboratorRole>('member');
+  const [inviteOpen, setInviteOpen] = useState(false);
   const [link, setLink] = useState('');
   const [token, setToken] = useState('');
   const [busy, setBusy] = useState(false);
@@ -92,51 +93,104 @@ export function Collaborators() {
     });
   }
   return (
-    <>
+    <div className="page">
       <PageHeading
         eyebrow={t.workspaceCaption}
         title={t.collaboration.title}
         description={t.collaboration.subtitle}
+        actions={
+          admin ? (
+            <button className="button primary" onClick={() => setInviteOpen(true)}>
+              {t.collaboration.invite}
+            </button>
+          ) : undefined
+        }
       />
       {error && <p role="alert">{error}</p>}
       <section className="panel collaboration-panel">
         <h2>{t.collaboration.title}</h2>
-        <ul>
-          {members.map((member) => (
-            <li
-              key={`${member.workspaceId ?? activeWorkspaceId}:${member.userId}`}
-              className="collaborator-row"
-            >
-              <div>
-                <strong>{member.username}</strong>
-                <p>{member.email}</p>
-                {member.workspaceName && <small>{member.workspaceName}</small>}
-              </div>
-              <span>{t.collaboration.roles[member.role]}</span>
-              {admin &&
-                member.role !== 'owner' &&
-                (actorRole === 'owner' || member.role !== 'admin') && (
+        <div className="table-scroll">
+          <table className="member-table">
+            <thead>
+              <tr>
+                <th scope="col">{t.design.participant}</th>
+                <th scope="col">{t.collaboration.role}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {members.map((member) => (
+                <tr key={`${member.workspaceId ?? activeWorkspaceId}:${member.userId}`}>
+                  <td>
+                    <div>
+                      <strong>{member.username}</strong>
+                      <p>{member.email}</p>
+                      {member.workspaceName && <small>{member.workspaceName}</small>}
+                    </div>
+                  </td>
+                  <td>
+                    <span>{t.collaboration.roles[member.role]}</span>
+                    {admin &&
+                      member.role !== 'owner' &&
+                      (actorRole === 'owner' || member.role !== 'admin') && (
+                        <select
+                          aria-label={`${t.collaboration.role} : ${member.username}`}
+                          value={member.role}
+                          disabled={busy}
+                          onChange={(event) => {
+                            const next = event.target.value as CollaboratorRole;
+                            void run(async () => {
+                              const saved = await updateMemberRole(
+                                member.workspaceId ?? activeWorkspaceId!,
+                                member.userId,
+                                next,
+                              );
+                              setMembers((previous) =>
+                                previous.map((m) =>
+                                  m.userId === saved.userId && m.workspaceId === member.workspaceId
+                                    ? { ...m, ...saved }
+                                    : m,
+                                ),
+                              );
+                            });
+                          }}
+                        >
+                          {roles.map((value) => (
+                            <option key={value} value={value}>
+                              {t.collaboration.roles[value]}
+                            </option>
+                          ))}
+                        </select>
+                      )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </section>
+      {admin && (
+        <section className="panel collaboration-panel">
+          <Modal
+            open={inviteOpen}
+            onClose={() => setInviteOpen(false)}
+            title={t.collaboration.invite}
+          >
+            <form className="modal-form" onSubmit={invite}>
+              <fieldset disabled={busy}>
+                <label className="field">
+                  <span>{t.collaboration.email}</span>
+                  <input
+                    required
+                    type="email"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                  />
+                </label>
+                <label className="field">
+                  <span>{t.collaboration.role}</span>
                   <select
-                    aria-label={`${t.collaboration.role} : ${member.username}`}
-                    value={member.role}
-                    disabled={busy}
-                    onChange={(event) => {
-                      const next = event.target.value as CollaboratorRole;
-                      void run(async () => {
-                        const saved = await updateMemberRole(
-                          member.workspaceId ?? activeWorkspaceId!,
-                          member.userId,
-                          next,
-                        );
-                        setMembers((previous) =>
-                          previous.map((m) =>
-                            m.userId === saved.userId && m.workspaceId === member.workspaceId
-                              ? { ...m, ...saved }
-                              : m,
-                          ),
-                        );
-                      });
-                    }}
+                    value={role}
+                    onChange={(e) => setRole(e.target.value as CollaboratorRole)}
                   >
                     {roles.map((value) => (
                       <option key={value} value={value}>
@@ -144,44 +198,23 @@ export function Collaborators() {
                       </option>
                     ))}
                   </select>
-                )}
-            </li>
-          ))}
-        </ul>
-      </section>
-      {admin && (
-        <section className="panel collaboration-panel">
-          <form onSubmit={invite}>
-            <fieldset disabled={busy}>
-              <label className="field">
-                <span>{t.collaboration.email}</span>
-                <input
-                  required
-                  type="email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                />
-              </label>
-              <label className="field">
-                <span>{t.collaboration.role}</span>
-                <select value={role} onChange={(e) => setRole(e.target.value as CollaboratorRole)}>
-                  {roles.map((value) => (
-                    <option key={value} value={value}>
-                      {t.collaboration.roles[value]}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <button className="button primary">{t.collaboration.invite}</button>
-              <p className="muted">{t.collaboration.noEmail}</p>
-              {link && (
-                <label className="field">
-                  <span>{t.collaboration.link}</span>
-                  <input value={link} readOnly onFocus={(e) => e.target.select()} />
                 </label>
-              )}
-            </fieldset>
-          </form>
+                <button className="button primary">{t.collaboration.invite}</button>
+                <p className="muted">{t.collaboration.noEmail}</p>
+                {error && (
+                  <p role="alert" className="form-error">
+                    {error}
+                  </p>
+                )}
+                {link && (
+                  <label className="field">
+                    <span>{t.collaboration.link}</span>
+                    <input value={link} readOnly onFocus={(e) => e.target.select()} />
+                  </label>
+                )}
+              </fieldset>
+            </form>
+          </Modal>
           <h3>{t.collaboration.pending}</h3>
           {!invitations.length && <p>{t.collaboration.empty}</p>}
           {invitations.map((i) => (
@@ -234,13 +267,14 @@ export function Collaborators() {
           </fieldset>
         </form>
       </section>
-    </>
+    </div>
   );
 }
 
 export function Notifications() {
   const { activeWorkspaceId, notify } = useAgora();
   const [items, setItems] = useState<Notification[]>([]);
+  const [unreadOnly, setUnreadOnly] = useState(false);
   const [cursor, setCursor] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
@@ -296,59 +330,79 @@ export function Notifications() {
     }
   }
   return (
-    <>
+    <div className="page">
       <PageHeading
         eyebrow={t.workspaceCaption}
         title={t.collaboration.notifications}
         description={t.collaboration.alertsSubtitle}
       />
       {error && <p role="alert">{error}</p>}
-      <section className="panel collaboration-panel">
-        {!items.length && !error && <p>{t.collaboration.none}</p>}
-        {items.map((n) => (
-          <article key={n.id} className={`notification-item ${!n.readAt ? 'unread' : ''}`}>
-            <strong>
-              {n.authorName} {t.collaboration[n.kind]}
-            </strong>
-            <p>{n.excerpt}</p>
-            <small>
-              {n.roomName} · {new Date(n.createdAt).toLocaleString(t.locale)}
-            </small>
-            <div>
-              <Link
-                className="button secondary"
-                href={`/fr/rooms/${n.roomId}?message=${n.messageId}${n.threadRootId ? `&thread=${n.threadRootId}` : ''}`}
-              >
-                {t.collaboration.open}
-              </Link>
-              {!n.readAt && (
-                <button
-                  className="button ghost"
-                  onClick={async () => {
-                    try {
-                      await markNotificationRead(activeWorkspaceId!, n.id);
-                      setItems((previous) =>
-                        previous.map((p) =>
-                          p.id === n.id ? { ...p, readAt: new Date().toISOString() } : p,
-                        ),
-                      );
-                    } catch (e) {
-                      notify(e instanceof Error ? e.message : 'Action indisponible.');
-                    }
-                  }}
+      <div className="room-status-tabs">
+        <button
+          aria-pressed={!unreadOnly}
+          className={!unreadOnly ? 'active' : ''}
+          onClick={() => setUnreadOnly(false)}
+        >
+          {t.common.all}
+        </button>
+        <button
+          aria-pressed={unreadOnly}
+          className={unreadOnly ? 'active' : ''}
+          onClick={() => setUnreadOnly(true)}
+        >
+          {t.design.unread} <span>{items.filter((n) => !n.readAt).length}</span>
+        </button>
+      </div>
+      <section className="panel collaboration-panel notifications-panel">
+        {!items.filter((n) => !unreadOnly || !n.readAt).length && !error && (
+          <Empty title={t.collaboration.none} />
+        )}
+        {items
+          .filter((n) => !unreadOnly || !n.readAt)
+          .map((n) => (
+            <article key={n.id} className={`notification-item ${!n.readAt ? 'unread' : ''}`}>
+              <strong>
+                {n.authorName} {t.collaboration[n.kind]}
+              </strong>
+              <p>{n.excerpt}</p>
+              <small>
+                {n.roomName} · {new Date(n.createdAt).toLocaleString(t.locale)}
+              </small>
+              <div>
+                <Link
+                  className="button secondary"
+                  href={`/fr/rooms/${n.roomId}?message=${n.messageId}${n.threadRootId ? `&thread=${n.threadRootId}` : ''}`}
                 >
-                  {t.collaboration.read}
-                </button>
-              )}
-            </div>
-          </article>
-        ))}
+                  {t.collaboration.open}
+                </Link>
+                {!n.readAt && (
+                  <button
+                    className="button ghost"
+                    onClick={async () => {
+                      try {
+                        await markNotificationRead(activeWorkspaceId!, n.id);
+                        setItems((previous) =>
+                          previous.map((p) =>
+                            p.id === n.id ? { ...p, readAt: new Date().toISOString() } : p,
+                          ),
+                        );
+                      } catch (e) {
+                        notify(e instanceof Error ? e.message : 'Action indisponible.');
+                      }
+                    }}
+                  >
+                    {t.collaboration.read}
+                  </button>
+                )}
+              </div>
+            </article>
+          ))}
         {cursor && (
           <button disabled={busy} className="button secondary" onClick={() => void more()}>
             {t.collaboration.more}
           </button>
         )}
       </section>
-    </>
+    </div>
   );
 }

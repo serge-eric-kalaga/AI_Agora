@@ -6,9 +6,6 @@ import {
   LayoutDashboard,
   MessagesSquare,
   Bot,
-  Sparkles,
-  CirclePlus,
-  Compass,
   Network,
   ChartNoAxesCombined,
   Search,
@@ -26,6 +23,7 @@ import {
   X,
   LogOut,
 } from 'lucide-react';
+import { ThemeButton } from './theme';
 import { useAgora } from './store';
 import { listNotifications } from '@/data/collaboration-api';
 import { usePersistentBoolean } from './persistent-state';
@@ -33,15 +31,12 @@ import { Avatar, Badge, Empty, Modal, Progress } from './ui';
 import { formatMoney, formatTime, t } from '@/i18n';
 const navigation = [
   { key: 'overview', path: '/fr', icon: LayoutDashboard },
-  { key: 'live', path: '/fr/rooms/ethique-ia', icon: MessagesSquare },
+  { key: 'rooms', path: '/fr/rooms', icon: MessagesSquare },
   { key: 'agents', path: '/fr/agents', icon: Bot },
-  { key: 'newAgent', path: '/fr/agents/new', icon: Sparkles },
-  { key: 'newRoom', path: '/fr/rooms/new', icon: CirclePlus },
-  { key: 'rooms', path: '/fr/rooms', icon: Compass },
-  { key: 'providers', path: '/fr/providers', icon: Network },
+  { key: 'analytics', path: '/fr/analytics', icon: ChartNoAxesCombined },
   { key: 'members', path: '/fr/members', icon: Network },
   { key: 'notifications', path: '/fr/notifications', icon: Bell },
-  { key: 'analytics', path: '/fr/analytics', icon: ChartNoAxesCombined },
+  { key: 'providers', path: '/fr/providers', icon: Network },
 ] as const;
 export function Shell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
@@ -94,6 +89,20 @@ export function Shell({ children }: { children: ReactNode }) {
     return () => window.removeEventListener('keydown', handler);
   }, []);
   useEffect(() => {
+    // Le menu hors écran ne doit pas recevoir le focus au clavier sur mobile.
+    const query = window.matchMedia('(max-width: 760px)');
+    const update = () => {
+      if (mobileMenu.current) mobileMenu.current.inert = query.matches && !mobile;
+    };
+    update();
+    const changed = () => {
+      if (!query.matches) setMobile(false);
+      update();
+    };
+    query.addEventListener('change', changed);
+    return () => query.removeEventListener('change', changed);
+  }, [mobile]);
+  useEffect(() => {
     if (!mobile) return;
     const previous = document.activeElement as HTMLElement | null;
     const menu = mobileMenu.current;
@@ -101,7 +110,9 @@ export function Shell({ children }: { children: ReactNode }) {
     const trap = (event: KeyboardEvent) => {
       if (event.key !== 'Tab') return;
       const elements = Array.from(
-        menu?.querySelectorAll<HTMLElement>('a[href], button:not([disabled])') ?? [],
+        menu?.querySelectorAll<HTMLElement>(
+          'a[href], button:not([disabled]), select:not([disabled]), input:not([disabled])',
+        ) ?? [],
       ).filter((el) => el.getClientRects().length > 0);
       const first = elements[0],
         last = elements.at(-1);
@@ -144,11 +155,16 @@ export function Shell({ children }: { children: ReactNode }) {
   const filteredRooms = state.rooms.filter((r) =>
     (r.name + ' ' + r.topic).toLowerCase().includes(query.toLowerCase()),
   );
-  const current =
-    navigation.find((n) => n.path === pathname) ??
-    (pathname.startsWith('/fr/agents/')
-      ? navigation.find((n) => n.key === 'newAgent')
-      : navigation.find((n) => n.key === 'live'));
+  const pageLabel =
+    pathname === '/fr/agents/new'
+      ? t.nav.newAgent
+      : pathname === '/fr/rooms/new'
+        ? t.nav.newRoom
+        : pathname.startsWith('/fr/agents/')
+          ? t.design.profile
+          : pathname.startsWith('/fr/rooms/')
+            ? t.nav.live
+            : t.nav[navigation.find((n) => n.path === pathname)?.key ?? 'overview'];
   return (
     <div className={`app-shell ${collapsed ? 'collapsed' : ''}`}>
       <a className="skip-link" href="#main">
@@ -222,22 +238,24 @@ export function Shell({ children }: { children: ReactNode }) {
         </div>
         <nav>
           {navigation.map(({ key, path, icon: Icon }) => {
-            const href = key === 'live' ? `/fr/rooms/${state.rooms[0]?.id ?? 'ethique-ia'}` : path;
+            const href = path;
             const isActive =
               pathname === path ||
-              (key === 'live' && pathname.startsWith('/fr/rooms/') && !pathname.endsWith('/new'));
+              (key === 'rooms' && pathname.startsWith('/fr/rooms/')) ||
+              (key === 'agents' && pathname.startsWith('/fr/agents/'));
             return (
               <Link
                 key={key}
                 href={href}
                 title={t.nav[key]}
+                aria-label={t.nav[key]}
                 className={`nav-item ${isActive ? 'active' : ''}`}
                 aria-current={isActive ? 'page' : undefined}
                 onClick={() => setMobile(false)}
               >
                 <Icon size={19} />
                 <span>{t.nav[key]}</span>
-                {key === 'live' && active > 0 && <span className="nav-count">{active}</span>}
+                {key === 'rooms' && active > 0 && <span className="nav-count">{active}</span>}
                 {key === 'providers' && <span className="nav-dot" />}
               </Link>
             );
@@ -269,7 +287,10 @@ export function Shell({ children }: { children: ReactNode }) {
                 className="icon-button"
                 title={t.session.logout}
                 aria-label={t.session.logout}
-                onClick={() => void logout().then(() => router.replace('/fr/connexion'))}
+                onClick={() => {
+                  setMobile(false);
+                  void logout().then(() => router.replace('/fr/connexion'));
+                }}
               >
                 <LogOut size={16} />
               </button>
@@ -279,7 +300,7 @@ export function Shell({ children }: { children: ReactNode }) {
           </div>
         </div>
       </aside>
-      <div className="app-body">
+      <div className="app-body" inert={mobile}>
         <header className="topbar">
           <div className="breadcrumb">
             <button
@@ -291,7 +312,7 @@ export function Shell({ children }: { children: ReactNode }) {
             </button>
             <span>Agora</span>
             <span className="slash">/</span>
-            <strong>{current ? t.nav[current.key] : t.nav.live}</strong>
+            <strong>{pageLabel}</strong>
           </div>
           <button
             className="search-trigger"
@@ -305,6 +326,7 @@ export function Shell({ children }: { children: ReactNode }) {
             </kbd>
           </button>
           <div className="topbar-actions">
+            <ThemeButton />
             <Link href="/fr/providers" className="infrastructure-status">
               <span className="status-dot" />
               {mode === 'api' ? t.session.connected : t.common.simulated}

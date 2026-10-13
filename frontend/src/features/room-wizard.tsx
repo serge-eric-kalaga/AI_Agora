@@ -9,9 +9,8 @@ import {
   MessageSquarePlus,
   Users,
   Shield,
-  Timer,
-  LockKeyhole,
   Coins,
+  LockKeyhole,
   Rocket,
   Pause,
   Globe,
@@ -25,7 +24,7 @@ import { useAgora } from '@/components/store';
 import { Avatar, Badge, Field, PageHeading } from '@/components/ui';
 import { formatMoney, t } from '@/i18n';
 import type { RoomDraft } from '@/domain/models';
-const stepIcons = [MessageSquarePlus, Users, Shield, Timer, LockKeyhole, Coins];
+const stepIcons = [MessageSquarePlus, Users, Shield, Coins];
 export function RoomWizard() {
   const { state, createRoom, mode, notify } = useAgora();
   const router = useRouter();
@@ -52,7 +51,7 @@ export function RoomWizard() {
     if (index === 0 && (!draft.name.trim() || !draft.topic.trim())) return t.rooms.nameRequired;
     if (index === 1 && draft.agentIds.length < 2) return t.rooms.chooseTwo;
     if (
-      index === 5 &&
+      index === 3 &&
       (!Number.isFinite(draft.budget) ||
         draft.budget <= 0 ||
         !Number.isFinite(draft.maxMinutes) ||
@@ -67,7 +66,7 @@ export function RoomWizard() {
     if (!issue) setStep(step + 1);
   }
   async function launch(running: boolean) {
-    for (const index of [0, 1, 5]) {
+    for (const index of [0, 1, 3]) {
       const issue = validate(index);
       if (issue) {
         setError(issue);
@@ -123,16 +122,7 @@ export function RoomWizard() {
             <div>
               <small>{t.rooms.steps[step]}</small>
               <h2>
-                {
-                  [
-                    t.rooms.topic,
-                    t.rooms.selectAgents,
-                    t.rooms.rules,
-                    t.rooms.temporal,
-                    t.rooms.visibility,
-                    t.rooms.steps[5],
-                  ][step]
-                }
+                {[t.rooms.topic, t.rooms.selectAgents, t.rooms.rules, t.rooms.steps[3]][step]}
               </h2>
             </div>
           </div>
@@ -262,8 +252,9 @@ export function RoomWizard() {
               </div>
             </>
           )}
-          {step === 3 && (
+          {step === 2 && (
             <>
+              <h3 className="wizard-subheading">{t.rooms.temporal}</h3>
               <div className="choice-list">
                 {(['live', 'background', 'permanent'] as const).map((mode, i) => {
                   const Icon = [Radio, Moon, Infinity][i];
@@ -290,8 +281,9 @@ export function RoomWizard() {
               <div className="info-box">{t.rooms.temporalDemo}</div>
             </>
           )}
-          {step === 4 && (
+          {step === 2 && (
             <>
+              <h3 className="wizard-subheading">{t.rooms.visibility}</h3>
               <div className="choice-list">
                 {(['private', 'shared'] as const).map((value) => (
                   <label key={value} className={draft.visibility === value ? 'selected' : ''}>
@@ -316,7 +308,7 @@ export function RoomWizard() {
               <div className="info-box">{t.rooms.sharingDemo}</div>
             </>
           )}
-          {step === 5 && (
+          {step === 3 && (
             <>
               <Field label={t.rooms.budget}>
                 <input
@@ -358,7 +350,7 @@ export function RoomWizard() {
               <ArrowLeft size={16} />
               {step ? t.common.back : t.common.cancel}
             </button>
-            {step < 5 ? (
+            {step < 3 ? (
               <button className="button primary" onClick={next}>
                 {t.common.next}
                 <ArrowRight size={16} />

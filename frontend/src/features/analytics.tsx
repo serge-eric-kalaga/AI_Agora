@@ -1,6 +1,7 @@
 'use client';
 import { useEffect, useMemo, useState } from 'react';
 import { Download, ChartNoAxesCombined, Bot, Coins, MessagesSquare } from 'lucide-react';
+import { RoomTable } from './dashboard';
 import { Avatar, PageHeading, Progress, SectionHeading, Empty } from '@/components/ui';
 import { useAgora } from '@/components/store';
 import { readWorkspaceAnalytics, type WorkspaceAnalytics } from '@/data/http-api';
@@ -120,7 +121,7 @@ export function Analytics() {
             icon: Coins,
             title: t.analytics.cloud,
             value: loading || !analytics ? '—' : formatMoney(analytics.cloudCost),
-            detail: analytics ? `${formatNumber(analytics.cloudTokens)} jetons cloud` : '',
+            detail: '',
           },
           {
             icon: Bot,
@@ -141,30 +142,66 @@ export function Analytics() {
           </div>
         ))}
       </div>
-      <section className="panel">
-        <SectionHeading title={t.analytics.contributions} icon={ChartNoAxesCombined} />
-        <p className="muted">{t.analytics.source}</p>
-        <div className="contributions">
-          {contributions.map(({ agent, count }) => (
-            <div className="contribution" key={agent.id}>
-              <Avatar agent={agent} size="sm" />
-              <strong>{agent.name}</strong>
-              <Progress
-                label={agent.name}
-                value={analytics?.agentMessages ? (count / analytics.agentMessages) * 100 : 0}
-                tone={agent.color}
-              />
-              <span>
-                {count} {t.dashboard.messages}
-              </span>
-            </div>
-          ))}
-        </div>
-        {!loading && !contributions.some(({ count }) => count > 0) && (
-          <Empty title={t.analytics.noMessages} />
-        )}
-        {loading && <Empty title={t.analytics.loading} />}
-      </section>
+      <div className="analytics-composition">
+        <section className="panel analytics-panel">
+          <SectionHeading title={t.analytics.contributions} icon={ChartNoAxesCombined} />
+          <p className="muted">{t.analytics.source}</p>
+          <div className="contributions">
+            {contributions.map(({ agent, count }) => (
+              <div className="contribution" key={agent.id}>
+                <Avatar agent={agent} size="sm" />
+                <strong>{agent.name}</strong>
+                <Progress
+                  label={agent.name}
+                  value={analytics?.agentMessages ? (count / analytics.agentMessages) * 100 : 0}
+                  tone={agent.color}
+                />
+                <span>
+                  {count} {t.dashboard.messages}
+                </span>
+              </div>
+            ))}
+          </div>
+          {!loading && !contributions.some(({ count }) => count > 0) && (
+            <Empty title={t.analytics.noMessages} />
+          )}
+          {loading && <Empty title={t.analytics.loading} />}
+        </section>
+        <aside className="panel analytics-panel">
+          <h2>{t.design.distribution}</h2>
+          <div className="distribution-row">
+            <span>{t.design.human}</span>
+            <strong>{value(analytics?.humanMessages)}</strong>
+          </div>
+          <Progress
+            label={t.design.human}
+            value={
+              analytics?.totalMessages
+                ? (analytics.humanMessages / analytics.totalMessages) * 100
+                : 0
+            }
+          />
+          <div className="distribution-row">
+            <span>{t.design.agent}</span>
+            <strong>{value(analytics?.agentMessages)}</strong>
+          </div>
+          <Progress
+            label={t.design.agent}
+            value={
+              analytics?.totalMessages
+                ? (analytics.agentMessages / analytics.totalMessages) * 100
+                : 0
+            }
+          />
+          <p className="muted">{t.analytics.source}</p>
+        </aside>
+      </div>
+      {state.rooms.length > 0 && (
+        <section className="analytics-rooms">
+          <h2>{t.nav.rooms}</h2>
+          <RoomTable rooms={state.rooms} />
+        </section>
+      )}
     </div>
   );
 }

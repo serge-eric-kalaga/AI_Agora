@@ -75,6 +75,8 @@ const roomReadSchema = z.object({
   amountSpent: z.coerce.number(),
   maxMessages: z.number().nullable(),
   maxDurationMinutes: z.number(),
+  messageCount: z.number().int().nonnegative().optional(),
+  lastMessageAt: z.string().nullable().optional(),
   conversationSettings: conversationSettingsSchema,
   cloudTokens: z.number(),
   localTokens: z.number(),
@@ -238,6 +240,7 @@ function mapRoom(value: z.infer<typeof roomReadSchema>): Room {
   resourceWorkspaces.set(`rooms:${value.id}`, value.workspaceId);
   return {
     id: value.id,
+    workspaceId: value.workspaceId,
     name: value.name,
     description: value.description,
     topic: value.topic,
@@ -257,6 +260,8 @@ function mapRoom(value: z.infer<typeof roomReadSchema>): Room {
     tokens: value.cloudTokens,
     localTokens: value.localTokens,
     simulatedTurns: 0,
+    messageCount: value.messageCount,
+    lastMessageAt: value.lastMessageAt ?? undefined,
     agentIds: value.participants.filter((item) => item.isActive).map((item) => item.agentId),
     createdAt: value.createdAt,
     startedAt: value.startedAt,

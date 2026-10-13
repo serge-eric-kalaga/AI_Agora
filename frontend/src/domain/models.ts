@@ -70,6 +70,7 @@ export const conversationSettingsSchema = z.object({
 export type ConversationSettings = z.infer<typeof conversationSettingsSchema>;
 export const roomSchema = z.object({
   id: z.string(),
+  workspaceId: z.string().optional(),
   name: z.string().min(1),
   description: z.string(),
   topic: z.string(),
@@ -88,6 +89,8 @@ export const roomSchema = z.object({
   tokens: z.number().nonnegative(),
   localTokens: z.number().nonnegative(),
   simulatedTurns: z.number().nonnegative(),
+  messageCount: z.number().int().nonnegative().optional(),
+  lastMessageAt: z.string().optional(),
   createdAt: z.string(),
   startedAt: z.string().nullable(),
   version: z.number().int().positive().default(1),
@@ -115,11 +118,14 @@ export type AgoraState = z.infer<typeof stateSchema>;
 export type RoomDraft = Omit<
   Room,
   | 'id'
+  | 'workspaceId'
   | 'status'
   | 'spent'
   | 'tokens'
   | 'localTokens'
   | 'simulatedTurns'
+  | 'messageCount'
+  | 'lastMessageAt'
   | 'createdAt'
   | 'startedAt'
   | 'version'

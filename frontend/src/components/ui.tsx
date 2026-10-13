@@ -1,27 +1,9 @@
 'use client';
 import { useEffect, useRef, type ReactNode, type CSSProperties } from 'react';
-import {
-  Bot,
-  BrainCircuit,
-  Sparkles,
-  Cpu,
-  Orbit,
-  ShieldCheck,
-  X,
-  ArrowUpRight,
-  type LucideIcon,
-} from 'lucide-react';
+import { Orbit, X, ArrowUpRight, type LucideIcon } from 'lucide-react';
 import Link from 'next/link';
 import type { Agent, Room } from '@/domain/models';
 import { t } from '@/i18n';
-const avatarIcons: Record<string, LucideIcon> = {
-  violet: BrainCircuit,
-  cyan: Sparkles,
-  amber: Bot,
-  blue: Cpu,
-  pink: Orbit,
-  green: ShieldCheck,
-};
 export function Avatar({
   agent,
   size = 'md',
@@ -29,10 +11,14 @@ export function Avatar({
   agent: Pick<Agent, 'name' | 'color'>;
   size?: 'sm' | 'md' | 'lg';
 }) {
-  const Icon = avatarIcons[agent.color] ?? Bot;
+  const words = agent.name
+    .replace(/[^\p{L}\p{N}\s]/gu, '')
+    .trim()
+    .split(/\s+/);
+  const initials = words.length > 1 ? words[0][0] + words.at(-1)![0] : agent.name.slice(0, 2);
   return (
     <span className={`avatar ${size} tone-${agent.color}`} aria-hidden="true">
-      <Icon strokeWidth={1.6} />
+      {initials.toUpperCase()}
     </span>
   );
 }

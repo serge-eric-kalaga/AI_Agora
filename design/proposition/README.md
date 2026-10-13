@@ -3,6 +3,8 @@
 Proposition du 13 octobre 2026. Maquette indépendante, en français, sans API ni accès aux comptes.
 Les conversations, chiffres et messages illustrent le design ; ce ne sont pas les données du laboratoire.
 
+Maquette validée et intégrée aux parcours réels : [bilan de l’intégration](../integration/README.md).
+
 ## Consulter la proposition
 
 Depuis la racine du projet :
