@@ -428,7 +428,6 @@ export const fr = {
     test: 'Tester la connexion',
     testing: 'Test en cours…',
     testSuccessDemo: 'Le service est prêt.',
-    securityTitle: 'Vos accès restent confidentiels',
     securityHint: 'Les clés sont chiffrées et ne sont jamais affichées après leur enregistrement.',
     saved: 'Configuration fournisseur enregistrée',
     add: 'Ajouter un fournisseur',

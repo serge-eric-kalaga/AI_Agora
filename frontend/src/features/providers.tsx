@@ -5,7 +5,6 @@ import {
   Cable,
   Cpu,
   Server,
-  ShieldCheck,
   SlidersHorizontal,
   Unplug,
   FlaskConical,
@@ -219,15 +218,6 @@ export function Providers() {
             </div>
           </section>
         ))}
-      <div className="local-banner">
-        <span className="feature-icon tone-violet">
-          <ShieldCheck size={24} />
-        </span>
-        <div>
-          <strong>{t.providers.securityTitle}</strong>
-          <p>{t.providers.securityHint}</p>
-        </div>
-      </div>
       <section className="panel model-catalog">
         <SectionHeading title={t.providers.modelCatalog} icon={Cpu} />
         <p className="muted">{t.providers.catalogHint}</p>
